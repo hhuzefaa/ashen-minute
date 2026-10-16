@@ -56,7 +56,6 @@ canvas#game { display: block; width: 100%; height: 100%; outline: none; }
 #crosshair { position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px; border-radius: 50%; background: rgba(233,228,218,0.35); }
 
 .ring-widget { position: absolute; top: 76px; left: 50%; transform: translateX(-50%); width: 64px; height: 64px; }
-#flame { left: calc(50% + 80px); }
 .ring-widget svg { width: 64px; height: 64px; transform: rotate(-90deg); }
 .ring-widget .track { fill: rgba(10,12,22,0.6); stroke: rgba(255,255,255,0.12); stroke-width: 4; }
 .ring-widget .ring { fill: none; stroke: var(--fire); stroke-width: 4; stroke-linecap: round; stroke-dasharray: 169.6; stroke-dashoffset: 0; transition: stroke 0.2s; }
@@ -65,10 +64,6 @@ canvas#game { display: block; width: 100%; height: 100%; outline: none; }
 .ring-text { position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--display); font-size: 20px; color: var(--hot); }
 .ring-label { position: absolute; left: 0; right: 0; top: 68px; text-align: center; font-family: var(--display); font-size: 10px; letter-spacing: 3px; color: var(--muted); }
 .ring-widget.warn .ring-text { animation: pulse 0.5s infinite alternate; color: #ff8a6a; }
-#memory { position: absolute; bottom: 7%; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; }
-#memory-label { font-family: var(--display); font-size: 13px; letter-spacing: 3px; color: var(--time); text-shadow: 0 0 10px rgba(105,217,232,0.7); }
-#memory-bar { width: 220px; height: 5px; background: rgba(105,217,232,0.15); border: 1px solid rgba(105,217,232,0.35); }
-#memory-fill { height: 100%; width: 0%; background: var(--time); box-shadow: 0 0 10px var(--time); }
 
 /* ---------- cards ---------- */
 #card { position: absolute; top: 34%; left: 50%; transform: translate(-50%, -50%); text-align: center; pointer-events: none; opacity: 0; transition: opacity 0.8s ease; }

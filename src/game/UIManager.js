@@ -1,3 +1,4 @@
+import { ROOM_COUNT } from '../world/levels.js';
 // Title / HUD / pause / settings / controls / credits / victory + dialogue, subtitles, readings.
 const $ = (id) => document.getElementById(id);
 
@@ -7,8 +8,7 @@ export class UIManager {
     this.el = {
       hud: $('hud'), prompt: $('prompt'), sub: $('subprompt'), objective: $('objective'),
       emberCount: $('ember-count'), levelName: $('level-name'),
-      timer: $('timer'), flame: $('flame'),
-      memory: $('memory'), memoryFill: $('memory-fill'),
+      timer: $('timer'),
       card: $('card'), cardKicker: $('card-kicker'), cardTitle: $('card-title'),
       flash: $('flash-text'), fade: $('fade'), loading: $('loading'),
       vRewind: $('vignette-rewind'), vWarn: $('vignette-warn'), letterbox: $('letterbox'),
@@ -137,129 +137,73 @@ export class UIManager {
   hideReading() { clearTimeout(this.readTimer); this.el.reading.classList.add('hidden'); }
 
   // ---------------------------------------------------------------- HUD
-  setEmbers(n) { this.el.emberCount.textContent = `${n}/10`; }
-  setLevelName(t) { this.el.levelName.textContent = t; }
+  setEmbers(n) { this.el.emberCount.textContent = `${n}/${ROOM_COUNT}`; }
+  setLevelName(t) { if (this.el.levelName.textContent !== t) this.el.levelName.textContent = t; }
 
-  ring(el, frac, text, warn = false, paused = false) {
+  ring(el, frac, text, warn = false) {
     el.classList.remove('hidden');
     el.querySelector('.ring').style.strokeDashoffset = String(169.6 * (1 - Math.max(0, Math.min(1, frac))));
-    el.querySelector('.ring-text').textContent = text;
+    const t = el.querySelector('.ring-text');
+    if (t.textContent !== text) t.textContent = text;
     el.classList.toggle('warn', warn);
-    el.classList.toggle('paused', paused);
   }
 
-  /** p = active puzzle (or null when walking corridors) */
-  updateHUD(p, player, extraPrompt, objective) {
-    if (p?.isLight) { this.updateLightHUD(p, player, extraPrompt, objective); return; }
-    let pr = null, sub = '';
-    if (p) { pr = this.promptFor(p); sub = this.subFor(p); }
-    if (!pr && extraPrompt) pr = extraPrompt;
+  /** p = active room (or null in corridors). Prompts only when an interaction exists. */
+  updateHUD(p, player, objective) {
+    let pr = null;
+    if (p?.flash) pr = { text: p.flash.text, cls: p.flash.cls };
+    else if (p?.prompt0) {
+      const t = p.prompt0;
+      if (t.type === 'sconce') pr = { text: t.b.lit ? LIGHT_UI.rekindle : LIGHT_UI.kindle, cls: 'fire' };
+      else if (t.type === 'lever') pr = { text: LIGHT_UI.lever, cls: 'gold' };
+      else if (t.type === 'read') pr = { text: LIGHT_UI.read, cls: 'cyan' };
+    }
     const text = pr ? pr.text : '';
     if (text !== this.lastPrompt) { this.el.prompt.textContent = text; this.lastPrompt = text; }
-    this.el.prompt.className = pr ? pr.cls || '' : '';
+    const cls = pr ? pr.cls || '' : '';
+    if (this.el.prompt.className !== cls) this.el.prompt.className = cls;
+    const sub = this.subFor(p);
     if (this.el.sub.textContent !== sub) this.el.sub.textContent = sub;
     if (this.el.objective.textContent !== objective) this.el.objective.textContent = objective;
-
-    const tm = p ? p.hudTimer : null;
-    if (tm) this.ring(this.el.timer, tm.t / tm.max, String(Math.max(0, Math.ceil(tm.t))), tm.t <= 3, tm.paused);
-    else this.el.timer.classList.add('hidden');
-    this.el.vWarn.classList.toggle('on', !!tm && tm.t <= 3 && !tm.paused);
-
-    if (player.flame) this.ring(this.el.flame, player.flame.t / player.flame.max, String(Math.ceil(player.flame.t)), player.flame.t < 3);
-    else this.el.flame.classList.add('hidden');
-
-    const rs = p?.selected;
-    const showMem = !!rs && rs.lit && !rs.lockedOn && (rs.rewinding || rs.spec.mode === 'collar') && !rs.busy;
-    this.el.memory.classList.toggle('hidden', !showMem);
-    if (showMem) {
-      const h = rs.relic.history;
-      const frac = rs.rewinding ? Math.max(0, h.cursor) / Math.max(1, h.capacity) : h.fill;
-      this.el.memoryFill.style.width = `${Math.round(frac * 100)}%`;
+    this.el.timer.classList.add('hidden');
+    this.el.vRewind.classList.remove('on');
+    // theme icons: Fire = a sconce burns · Shadow = a shadow rests on a rune or carries you · Time = echoes
+    let fire = false, shadow = !!this.game.shadows.playerOnShadow;
+    if (p) {
+      for (const b of p.sconces) if (b.lit) { fire = true; break; }
+      if (!shadow) for (const ru of p.runes.values()) if (ru.covered || (ru.lit && !ru.spec.socket)) { shadow = true; break; }
     }
-    const rewinding = !!rs?.rewinding;
-    this.el.vRewind.classList.toggle('on', rewinding);
-    const anyLit = p ? [...p.relics.values()].some((r) => r.lit) : false;
-    this.el.fire.classList.toggle('active', anyLit || !!player.flame);
-    this.el.shadow.classList.toggle('active', !!p && ([...p.runes.values()].some((r) => r.lit) || (rs && p.alignmentOf(rs) > 0.6) || p.focus));
-    this.el.time.classList.toggle('active', rewinding);
+    this.el.fire.classList.toggle('active', fire);
+    this.el.shadow.classList.toggle('active', shadow);
+    this.el.time.classList.toggle('active', this.game.echoes.alive || this.game.echoes.recording);
+  }
+
+  /** The key list, shown only the first time in each room (and never in quiet rooms). */
+  subFor(p) {
+    if (!p || p.passage || p.level.quiet || p.completed) return '';
+    const seen = this.game.world.progress.data.story;
+    const key = 'keys_' + p.level.id;
+    if (seen.includes(key)) return '';
+    if (!this.keysT) this.keysT = { id: null, t0: 0 };
+    if (this.keysT.id !== p.level.id) { this.keysT.id = p.level.id; this.keysT.t0 = this.game.time; }
+    if (this.game.time - this.keysT.t0 > 10) { this.game.world.progress.mark('story', key); return ''; }
+    const parts = ['[W A S D] WALK', '[SHIFT] RUN'];
+    if (p.sconces.some((b) => !b.warded)) parts.push('[E] KINDLE');
+    if (p.stones.some((s) => s.rail)) parts.push('[E] AT A LEVER: SLIDE');
+    if (this.game.echoes.canUse) parts.push('[R] MARK A MINUTE');
+    parts.push('HOLD [Q] FOCUS');
+    return parts.join('   ·   ');
   }
 
   /** Time: the minute being marked, then the echo's hold (reuses the #timer ring). */
   echoRing(h) {
     const lbl = this.el.timer.querySelector('.ring-label');
     if (!h) { this.el.timer.classList.remove('echo'); this.el.vRewind.classList.remove('faint'); return; }
-    this.ring(this.el.timer, h.t / h.max, String(Math.max(0, Math.ceil(h.t))), h.warn, false);
+    this.ring(this.el.timer, h.t / h.max, String(Math.max(0, Math.ceil(h.t))), h.warn);
     this.el.timer.classList.add('echo');
     if (lbl.textContent !== h.label) lbl.textContent = h.label;
     this.el.vRewind.classList.toggle('on', h.label === 'MINUTE');
     this.el.vRewind.classList.add('faint');
-    this.el.time.classList.add('active');
-  }
-
-  /** HUD for rooms built on the five rules: no turning, no memory bar, no carried flame. */
-  updateLightHUD(p, player, extraPrompt, objective) {
-    let pr = null;
-    if (p.flash) pr = { text: p.flash.text, cls: p.flash.cls };
-    else if (p.prompt0) {
-      const t = p.prompt0;
-      if (t.type === 'sconce') pr = t.b.lit ? { text: LIGHT_UI.rekindle, cls: 'fire' } : { text: LIGHT_UI.kindle, cls: 'fire' };
-      else if (t.type === 'lever') pr = { text: LIGHT_UI.lever, cls: 'gold' };
-      else if (t.type === 'read') pr = { text: LIGHT_UI.read, cls: 'cyan' };
-    }
-    if (!pr && extraPrompt) pr = extraPrompt;
-    const text = pr ? pr.text : '';
-    if (text !== this.lastPrompt) { this.el.prompt.textContent = text; this.lastPrompt = text; }
-    this.el.prompt.className = pr ? pr.cls || '' : '';
-    if (this.el.sub.textContent !== '') this.el.sub.textContent = '';
-    if (this.el.objective.textContent !== objective) this.el.objective.textContent = objective;
-    this.el.timer.classList.add('hidden');
-    this.el.flame.classList.add('hidden');
-    this.el.memory.classList.add('hidden');
-    this.el.vRewind.classList.remove('on');
-    this.el.vWarn.classList.remove('on');
-    let anyLit = false, onRune = false;
-    for (const b of p.sconces) if (b.lit) { anyLit = true; break; }
-    for (const ru of p.runes.values()) if (ru.covered || ru.lit) { onRune = true; break; }
-    this.el.fire.classList.toggle('active', anyLit);
-    this.el.shadow.classList.toggle('active', onRune || !!this.game.shadows.playerOnShadow);
-    this.el.time.classList.toggle('active', false);
-  }
-
-  promptFor(p) {
-    if (p.flash) return { text: p.flash.text, cls: p.flash.cls };
-    const t = p.prompt0;
-    const P = PROMPTS_UI;
-    const player = this.game.player;
-    if (t) {
-      if (t.type === 'relic') {
-        const sp = t.rs.spec;
-        if (sp.relayOnly) return { text: P.coldRelay, cls: '' };
-        if (sp.cold) return player.flame ? { text: P.kindle, cls: 'fire' } : { text: P.cold, cls: '' };
-        return { text: P.ignite, cls: 'fire' };
-      }
-      if (t.type === 'lever') return { text: P.lever, cls: 'gold' };
-      if (t.type === 'hearth') return { text: P.takeFlame, cls: 'fire' };
-      if (t.type === 'read') return { text: P.read, cls: 'cyan' };
-    }
-    const rs = p.selected;
-    if (!rs || !rs.lit || rs.busy) return null;
-    if (rs.lockedOn) return { text: P.holds, cls: 'gold' };
-    if (rs.rewinding) return { text: '◀◀', cls: 'cyan' };
-    if (p.bestCloseness(rs) > 0.6) return { text: P.near, cls: 'gold' };
-    if (rs.spec.mode === 'collar' && !rs.usedRewind && !p.level.quiet) return { text: P.rewindHint, cls: 'cyan' };
-    if (p.level.quiet && p.level.id !== 1) return null;
-    return { text: P.turn, cls: '' };
-  }
-
-  subFor(p) {
-    const rs = p.selected;
-    if (!rs || !rs.lit || rs.lockedOn || rs.busy) return '';
-    if (p.level.quiet && p.level.id !== 1) return '';
-    const parts = [rs.spec.mode === 'collar' ? '[A] [D] NUDGE' : '[A] [D] TURN'];
-    parts.push('HOLD [R] REWIND');
-    if (rs.spec.rail) parts.push('[E] AT THE LEVER: SLIDE');
-    parts.push('HOLD [Q] FOCUS');
-    return parts.join('   ·   ');
   }
 
   clearHUD() {
@@ -267,15 +211,13 @@ export class UIManager {
     this.el.sub.textContent = '';
     this.lastPrompt = '';
     this.el.timer.classList.add('hidden');
-    this.el.flame.classList.add('hidden');
-    this.el.memory.classList.add('hidden');
     this.el.vRewind.classList.remove('on');
     this.el.vWarn.classList.remove('on');
   }
 
-  setVictoryStats(seconds, rewinds, secrets) {
+  setVictoryStats(seconds, echoes, secrets, lost) {
     const m = Math.floor(seconds / 60), s = Math.floor(seconds % 60);
-    this.el.stats.textContent = `Time ${m}:${String(s).padStart(2, '0')}   ·   Memories rewound ${rewinds}   ·   Inscriptions found ${secrets}/3`;
+    this.el.stats.textContent = `Time ${m}:${String(s).padStart(2, '0')}   ·   Minutes left behind ${echoes}   ·   Inscriptions ${secrets}/3   ·   Lost Minutes ${lost}/6`;
   }
 
   // ---------------------------------------------------------------- settings
@@ -315,9 +257,3 @@ export class UIManager {
 }
 
 const LIGHT_UI = { kindle: '[E] KINDLE THE SCONCE', rekindle: '[E] FEED THE SCONCE', lever: '[E] SLIDE THE STONE', read: '[E] READ' };
-const PROMPTS_UI = {
-  ignite: '[E] IGNITE RELIC', kindle: '[E] KINDLE THE RELIC', cold: 'THIS RELIC IS COLD — IT NEEDS A FLAME',
-  coldRelay: 'THIS RELIC WAITS FOR ANOTHER’S FIRE', takeFlame: '[E] TAKE THE FLAME', lever: '[E] SLIDE THE RELIC',
-  read: '[E] READ', turn: 'TURN THE RELIC TO ALIGN ITS SHADOW', rewindHint: 'HOLD [R] TO REWIND THE RELIC',
-  near: 'THE SHADOW IS NEAR', holds: 'THE SHADOW HOLDS',
-};

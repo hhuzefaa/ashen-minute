@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { SHADOW, ShadowSystem, coverDistance, tipDistance } from './ShadowSystem.js';
+import { MarrowEcho } from './Echo.js';
 
 // Dev tool: window.__ashen.debug.lightMap(levelId, { step, render })
 // Grid-samples the room's walkable floor; treats each sample as Ilen's lantern and reports which
@@ -8,7 +9,7 @@ import { SHADOW, ShadowSystem, coverDistance, tipDistance } from './ShadowSystem
 // Uses ShadowSystem.compute — the exact rule the game runs.
 const LANTERN_Y = 0.66;
 
-export function lightMap(game, levelId, { step = 0.5, render = false, extraLights = [] } = {}) {
+export function lightMap(game, levelId, { step = 0.5, render = false, extraLights = [], wake = false } = {}) {
   const p = game.world.levelById.get(levelId);
   if (!p || !p.isLight) return { error: `level ${levelId} is not a light room` };
   const col = game.collision;
@@ -31,7 +32,7 @@ export function lightMap(game, levelId, { step = 0.5, render = false, extraLight
       out.samples++;
       let hitAny = false;
       for (const st of p.stones) {
-        if (st.dormant && !st.awake) continue;
+        if (st.dormant && !st.awake && !wake) continue;
         if (!ShadowSystem.compute(col, st.base, x, z, o, a, b)) continue;
         const s = fake(st);
         for (const ru of p.runes.values()) {
@@ -78,6 +79,35 @@ export function lightMap(game, levelId, { step = 0.5, render = false, extraLight
       });
     }
     out[L.group][L.id] = list;
+  }
+
+  // Marrow's rounds: simulate one loop; when does her light throw a crossing over the abyss?
+  if (p.level.marrow) {
+    const m = new MarrowEcho({ scene: new THREE.Group(), shadows: { extraLights: [] } }, p.level.marrow.path, { speed: p.level.marrow.speed ?? 1.6 });
+    const P = p.level.marrow.path;
+    let cycle = 0;
+    for (let i = 0; i < P.length; i++) { const a = P[i], b2 = P[(i + 1) % P.length]; cycle += Math.hypot(b2.x - a.x, b2.z - a.z) / m.speed + (a.wait || 0); }
+    const pos = new THREE.Vector3();
+    const windows = [];
+    let open = null, on = 0;
+    const DT = 0.05;
+    for (let t = 0; t <= cycle + 1e-6; t += DT) {
+      m.position(pos);
+      let crossing = false;
+      for (const st of p.stones) {
+        if (!ShadowSystem.compute(col, st.base, pos.x, pos.z, o, a, b)) continue;
+        let gap = false, land = false;
+        for (let u = SHADOW.START; u <= o.len + SHADOW.TIP; u += 0.25) {
+          const f = !!col.standingOn(st.base.x + o.ux * u, st.base.z + o.uz * u, 0, 'floor');
+          if (!f) gap = true; else if (gap) { land = true; break; }
+        }
+        if (gap && land) crossing = true;
+      }
+      if (crossing) { on += DT; if (open === null) open = t; } else if (open !== null) { windows.push([+open.toFixed(2), +t.toFixed(2)]); open = null; }
+      m.advance(DT);
+    }
+    if (open !== null) windows.push([+open.toFixed(2), +cycle.toFixed(2)]);
+    out.marrow = { cycle: +cycle.toFixed(2), windows, fraction: +(on / cycle).toFixed(3) };
   }
 
   // optional: coloured dots in the scene (gold = a valid rune wakes from here)

@@ -14,6 +14,7 @@ import { Settings } from './Settings.js';
 import { LightPool } from './LightPool.js';
 import { COLORS, glowTexture } from './Palette.js';
 import { World } from '../world/World.js';
+import { ROOM_COUNT } from '../world/levels.js';
 import { ShadowSystem } from './ShadowSystem.js';
 import { EchoSystem } from './Echo.js';
 import { lightMap } from './LightMap.js';
@@ -141,7 +142,7 @@ export class Game {
   /** Game-time callback (pauses with the game). */
   delay(t, fn) { this.timers.push({ t, fn }); }
 
-  setWarmth(n) { this.warmthTarget = Math.min(1, n / 10); }
+  setWarmth(n) { this.warmthTarget = Math.min(1, n / ROOM_COUNT); }
 
   // ------------------------------------------------------------------ states
   toTitle() {
@@ -167,7 +168,6 @@ export class Game {
     this.player.setSpawn(new THREE.Vector3(x, 0, z), yaw);
     this.player.respawn();
     this.player.setSafe(x, 0, z, yaw);
-    this.player.flame = null;
     this.cameraCtl.snap(yaw, 0.3);
   }
 
@@ -183,7 +183,6 @@ export class Game {
       this.shadows.clear();
       this.world.progress.data.started = true;
       this.world.progress.save();
-      this.story.relicLinesPlayed.clear();
       this.finaleOrbs = null; this.heartBackwards = false; this.ashRising = 0;
       this.runStart = performance.now();
       this.onEmbers(0, true);
@@ -219,7 +218,7 @@ export class Game {
   }
 
   enterCutscene() {
-    for (const p of this.world.puzzles) for (const rs of p.relics.values()) if (rs.rewinding) p.endRewind(rs);
+    this.echoes.cancelRecording();
     this.state = STATE.CUTSCENE;
     this.input.clear();
     this.ui.clearHUD();
@@ -240,7 +239,6 @@ export class Game {
     this.input.clear();
     this.input.exitLock();
     this.ui.show('pause');
-    for (const p of this.world.puzzles) for (const rs of p.relics.values()) if (rs.rewinding) p.endRewind(rs);
     if (this.audio.ctx) this.audio.ctx.suspend();
   }
 
@@ -257,8 +255,7 @@ export class Game {
     this.ui.letterbox(false);
     this.ui.el.flash.classList.remove('show');
     const pr = this.world.progress.data;
-    const rewinds = this.world.puzzles.reduce((a, p) => a + p.stats.rewinds, 0);
-    this.ui.setVictoryStats((performance.now() - this.runStart) / 1000, rewinds, pr.secrets.length);
+    this.ui.setVictoryStats((performance.now() - this.runStart) / 1000, pr.echoesMade || 0, pr.secrets.length, pr.lostMinutes.length);
     this.ui.show('victory');
     this.ui.fadeTo(0, 1.5);
   }
@@ -298,8 +295,8 @@ export class Game {
   // ------------------------------------------------------------------ world callbacks
   onEmbers(n, instant = false) {
     this.ui.setEmbers(n);
-    this.player.keeper.setEmberLevel(Math.min(3, Math.ceil(n / 3.4)));
-    this.audio.setWarmth(Math.min(3, n / 3.3));
+    this.player.keeper.setEmberLevel(Math.min(3, Math.ceil(n / 2)));
+    this.audio.setWarmth(Math.min(3, n / 2));
     this.setWarmth(n);
     if (instant) this.warmth = this.warmthTarget;
   }
@@ -307,13 +304,13 @@ export class Game {
   onEnterLevel(L, p) {
     if (L.hub) {
       if (!this.story.seen('hub_first')) { this.story.trigger('hub_first'); return; }
-      if (!p.completed && [...p.relics.values()].some((r) => r.awake) && !this.story.seen('card_10')) {
+      if (!p.completed && this.world.ringAwake && !this.story.seen('card_10')) {
         this.world.progress.mark('story', 'card_10');
         this.ui.card(L.numeral, L.name, 2.6);
       }
       return;
     }
-    if (!p.completed) this.ui.card(L.numeral, L.name, 2.6);
+    if (!p.completed && !p.passage) this.ui.card(L.numeral, L.name, 2.6);
     this.story.onEnterLevel(L);
   }
 
@@ -326,7 +323,6 @@ export class Game {
     const pl = this.player;
     if (pl.hasSafe) pl.setSpawn(pl.lastSafe, pl.lastSafeYaw); // back to the last safe ground
     else { const cp = this.world.checkpoint; pl.setSpawn(new THREE.Vector3(cp.x, 0, cp.z), cp.yaw); }
-    pl.flame = null;
     this.echoes.cancelRecording(); // falling cancels a minute being marked
     this.falls = (this.falls || 0) + 1;
     this.lastFallAt = this.time;
@@ -375,6 +371,7 @@ export class Game {
   sceneAction(name, skipping = false) {
     const w = this.world;
     if (name === 'wakeRing') w.wakeRing(!skipping);
+    else if (name === 'openingBarks') this.story.openingBarks();
     else if (name === 'embersConverge') {
       const from = this.player.keeper.lanternCore.getWorldPosition(new THREE.Vector3());
       this.finaleOrbs = [];
@@ -496,13 +493,10 @@ export class Game {
     const input = this.input;
     if (this.cameraCtl.override) this.cameraCtl.clearOverride();
     if (input.wasPressed('Backspace')) { this.restartPuzzle(); return; }
-    const p = this.world.activePuzzle;
-    const sel = p?.selected;
-    const operating = !p?.isLight && !!sel && sel.lit && !sel.lockedOn && !sel.busy; // old dial rooms only
-    // 1. player (strafe keys belong to the relic while operating one)
-    this.player.update(dt, input, this.cameraCtl.yaw, this.collision, { canMove: true, suppressStrafe: operating, sprint: input.isDown('ShiftLeft', 'ShiftRight') });
+    // 1. player (A/D always strafe: aiming is walking)
+    this.player.update(dt, input, this.cameraCtl.yaw, this.collision, { canMove: true, sprint: input.isDown('ShiftLeft', 'ShiftRight') });
     // 2. time: R marks a minute / releases the echo; echoes replay and hold their light
-    if (input.wasPressed('KeyR') && (!p || p.isLight)) this.echoes.press();
+    if (input.wasPressed('KeyR')) this.echoes.press();
     this.echoes.update(dt);
     // 2b. light: every fire casts every nearby stone's shadow (Ilen's lantern is a fire)
     this.shadows.ilenActive = true;
@@ -511,43 +505,34 @@ export class Game {
     this.cameraCtl.assistTarget = this.shadows.ilenNear(this.player.pos, 7) ? 1 : 0;
     this.cameraCtl.update(dt, input, this.player.pos, this.collision, true);
     this.player.keeper.group.visible = !this.cameraCtl.tooClose;
-    // 3. world: puzzles, gates, triggers
+    // 4. world: rooms, gates, triggers
     this.world.update(dt, input, this.player, this.cameraCtl, true);
-    // carried flame burns down
-    const fl = this.player.flame;
-    if (fl) {
-      fl.t -= dt;
-      this.effects.flame(this.player.keeper.lanternCore.getWorldPosition(this._lp || (this._lp = new THREE.Vector3())), 40, dt, 0.08, 0.7);
-      if (fl.t <= 0) { this.player.flame = null; p?.showFlash('THE FLAME GUTTERS OUT', '', 1.8); this.audio.play('sfx_no_memory'); }
-    }
-    this.player.keeper.lanternBoost = fl ? 2.2 : 0;
     const cur = this.world.activePuzzle;
-    this.ui.updateHUD(cur, this.player, null, this.objectiveText(cur));
+    this.ui.updateHUD(cur, this.player, this.objectiveText(cur));
     this.ui.echoRing(this.echoes.hud);
-    const ringAwake = !!cur?.level.hub && [...cur.relics.values()].some((r) => r.awake);
-    this.ui.setLevelName(!cur ? '' : cur.level.hub && !ringAwake ? 'The Sanctuary of Minutes' : `${cur.level.numeral} · ${cur.level.name}`);
+    const ringAwake = this.world.ringAwake;
+    this.ui.setLevelName(!cur ? '' : cur.level.hub ? (ringAwake ? cur.level.name : 'The Sanctuary of Minutes') : cur.passage ? '' : `${cur.level.numeral} · ${cur.level.name}`);
     if (input.wasPressed('KeyE') && !cur?.prompt0) this.ui.hideReading();
   }
 
   objectiveText(p) {
-    const n = this.world.progress.data.completed.length;
-    const ringAwake = n >= 9;
-    if (p && !p.completed && (!p.level.hub || ringAwake)) return p.level.objective;
+    const done = this.world.progress.data.completed;
+    const ringAwake = this.world.ringAwake;
+    if (p && !p.passage && !p.completed && (!p.level.hub || ringAwake)) return p.level.objective;
     if (p && p.completed && !p.level.hub) return 'Restored. The way onward is open.';
-    if (n === 0) return 'Enter the temple.';
-    if (n < 4) return 'Follow Marrow’s embers through the west wing.';
-    if (n < 7) return 'The north wing is open.';
-    if (n < 9) return 'The east wing is open.';
+    if (!done.includes(1)) return 'Enter the temple.';
+    if (!done.includes(3)) return 'Follow Marrow’s embers through the west wing.';
+    if (!done.includes(6)) return 'The north wing is open.';
+    if (!ringAwake) return 'The east wing is open.';
     return 'Return to the Sanctuary. The ring has woken.';
   }
 
   updateTitle(dt) {
     this.titleT += dt;
     const a = this.titleT * 0.05;
-    this.cameraCtl.override = {
-      pos: new THREE.Vector3(Math.sin(a) * 8, 4.2 + Math.sin(this.titleT * 0.2) * 0.4, 70 + Math.cos(a) * 4),
-      look: new THREE.Vector3(0, 3.5, 44), speed: 1.2,
-    };
+    const o = this._titleShot || (this._titleShot = { pos: new THREE.Vector3(), look: new THREE.Vector3(0, 3.5, 44), speed: 1.2 });
+    o.pos.set(Math.sin(a) * 8, 4.2 + Math.sin(this.titleT * 0.2) * 0.4, 70 + Math.cos(a) * 4);
+    this.cameraCtl.override = o;
     if (this.titleT < 0.05) this.cameraCtl.first = true;
     this.player.update(dt, this.input, 0, this.collision, { canMove: false });
     this.cameraCtl.update(dt, this.input, this.player.pos, this.collision, false);

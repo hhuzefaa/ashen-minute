@@ -218,7 +218,7 @@ export class LightPuzzle {
   /** Hints on demand: Marrow speaks after a while without progress (never the solution first). */
   updateHints(dt) {
     const hints = this.level.hints;
-    if (!hints || this.passage) return;
+    if (!hints || this.passage || (this.level.hub && !this.game.world.ringAwake)) return;
     this.progressT += dt;
     const k = this.level.quiet ? 1.5 : 1;
     if (this.hintsGiven < hints.length && this.progressT > HINT_T[this.hintsGiven] * k) {

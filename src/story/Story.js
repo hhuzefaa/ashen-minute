@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { SCENES, RELIC_LINES, COMPLETE_LINES, ENTER_LINES, READINGS, SECRETS, SPEAKERS, LOST_MINUTES } from './script.js';
+import { SCENES, COMPLETE_LINES, ENTER_LINES, READINGS, SECRETS, SPEAKERS, LOST_MINUTES, OPENING_BARKS } from './script.js';
 
 // Story director: decides when scenes and barks play, runs in-engine cutscenes, and records
 // which beats have been seen (persisted with the save). Cutscenes are skippable (Esc) and always
@@ -10,7 +10,6 @@ export class Story {
     this.scene = null;    // running cutscene
     this.barkQueue = [];
     this.bark = null;
-    this.relicLinesPlayed = new Set();
   }
 
   get progress() { return this.game.world.progress; }
@@ -24,12 +23,9 @@ export class Story {
     else if (id === 'sockets_done') this.say('ILEN', 'Three shadows. One heart. Hold.');
   }
 
-  onRelicLit(L, rs) {
-    if (this.relicLinesPlayed.has(L.id) || !RELIC_LINES[L.id]) return;
-    if (L.id === 7 && rs.id !== 'C') return;
-    this.relicLinesPlayed.add(L.id);
-    const [sp, text] = RELIC_LINES[L.id];
-    this.say(sp, text, 5.5);
+  /** The cold open's remaining lines, as barks once the Keeper walks. */
+  openingBarks() {
+    OPENING_BARKS.forEach((l, i) => this.game.delay(3 + i * 7, () => this.say(l[0], l[1], 5.5)));
   }
 
   /** First time the Keeper's own lantern visibly swings a stone's shadow in a room. */

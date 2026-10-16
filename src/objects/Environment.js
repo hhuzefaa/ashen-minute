@@ -395,7 +395,7 @@ export function rail(ctx, from, to, slots, lever) {
   handle.rotation.z = 0.5;
   g.add(post, handle);
   ctx.group.add(g);
-  ctx.world.addBox(lever.x - 0.2, 0, lever.z - 0.2, lever.x + 0.2, 1.1, lever.z + 0.2, 'wall');
+  ctx.world.addBox(lever.x - 0.2, 0, lever.z - 0.2, lever.x + 0.2, 1.1, lever.z + 0.2, 'prop'); // never blocks light
   return { handle };
 }
 
@@ -444,4 +444,46 @@ export function lightShaft(ctx, x, z, h = 14, r = 2.2, color = 0x9fb5d8, opacity
   m.renderOrder = 4;
   ctx.group.add(m);
   return m;
+}
+
+/** Low stone balustrade (≈1 m): blocks walking and hopping, never blocks light or shadow ('prop'). */
+export function balustrade(ctx, { x0, z0, x1, z1, h = 1.0, thick = 0.4 }) {
+  const alongX = Math.abs(x1 - x0) >= Math.abs(z1 - z0);
+  const len = alongX ? Math.abs(x1 - x0) : Math.abs(z1 - z0);
+  const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+  const g = new THREE.Group();
+  const rail = new THREE.Mesh(new THREE.BoxGeometry(alongX ? len : thick, 0.14, alongX ? thick : len), mat('pillar'));
+  rail.position.set(cx, h - 0.07, cz);
+  g.add(rail);
+  const n = Math.max(2, Math.round(len / 0.55));
+  const post = new THREE.CylinderGeometry(0.08, 0.11, h - 0.14, 6);
+  for (let i = 0; i <= n; i++) {
+    const t = -len / 2 + (i / n) * len;
+    const m = new THREE.Mesh(post, mat('pillar'));
+    m.position.set(alongX ? cx + t : cx, (h - 0.14) / 2, alongX ? cz : cz + t);
+    g.add(m);
+  }
+  ctx.group.add(mergeGroup(g, mat('pillar')));
+  ctx.world.addBox(alongX ? Math.min(x0, x1) : cx - thick / 2, 0, alongX ? cz - thick / 2 : Math.min(z0, z1),
+    alongX ? Math.max(x0, x1) : cx + thick / 2, h, alongX ? cz + thick / 2 : Math.max(z0, z1), 'prop');
+}
+
+/** Iron grille across a wall opening: blocks the Keeper, lets light and shadow through ('prop'). */
+export function grille(ctx, { x, z0, z1, h = 3.2 }) {
+  const g = new THREE.Group();
+  const barMat = new THREE.MeshStandardMaterial({ color: 0x2a2a30, roughness: 0.6, metalness: 0.6 });
+  const n = Math.round(Math.abs(z1 - z0) / 0.22);
+  const bar = new THREE.CylinderGeometry(0.03, 0.03, h, 5);
+  for (let i = 0; i <= n; i++) {
+    const m = new THREE.Mesh(bar, barMat);
+    m.position.set(x, h / 2, z0 + (i / n) * (z1 - z0));
+    g.add(m);
+  }
+  for (const y of [0.4, h - 0.2]) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, Math.abs(z1 - z0)), barMat);
+    m.position.set(x, y, (z0 + z1) / 2);
+    g.add(m);
+  }
+  ctx.group.add(mergeGroup(g, barMat));
+  ctx.world.addBox(x - 0.2, 0, Math.min(z0, z1), x + 0.2, h, Math.max(z0, z1), 'prop');
 }

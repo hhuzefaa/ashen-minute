@@ -1,4 +1,4 @@
-import { platform, pillar, brazier, rubble, inscription, backdrop, wallX, wallZ, statue } from '../objects/Environment.js';
+import { platform, pillar, brazier, rubble, inscription, backdrop, wallX, wallZ, statue, balustrade, grille } from '../objects/Environment.js';
 import { COLORS } from '../game/Palette.js';
 
 // ===============================================================================================
@@ -33,7 +33,7 @@ export const GATES = [
   { id: 'g_L5', x: 0, z: -58.45, axis: 'x' },
   { id: 'g_L6m', x: 2.45, z: -69, axis: 'z' },
   { id: 'g_L6', x: 18.45, z: -88, axis: 'z' },
-  { id: 'g_L7', x: 33, z: -61.55, axis: 'x', emblem: 'eye' },
+  { id: 'g_L7', x: 33, z: -61.55, axis: 'x' },
   { id: 'g_sc_n', x: 16, z: -22.45, axis: 'x' },
   { id: 'g_hub_e', x: 22.45, z: 0, axis: 'z' },
   { id: 'g_L8m', x: 39.95, z: 4, axis: 'z' },
@@ -93,8 +93,8 @@ export const ZONES = [
         pillar(ctx, -12.3, v, { h: 11, broken: v === 7.5 }); pillar(ctx, 12.3, v, { h: 11 });
       }
       for (const [x, z] of [[-19, 19], [19, 19], [-19, -19], [19, -19]]) statue(ctx, x, z, Math.atan2(x, z) + Math.PI, 1.25, x > 0 && z < 0);
-      // ten braziers: one wakes for every level restored (environmental progress)
-      ctx.progressBraziers = [[-8, 19.5], [8, 19.5], [-19.5, 7], [-19.5, -7], [-8, -19.5], [8, -19.5], [19.5, -7], [19.5, 7], [-14, 16], [14, 16]]
+      // six braziers, one per restored room — all farther than REACH from every ring stone (rule 1)
+      ctx.progressBraziers = [[-16, 20], [16, 20], [-19.5, -15], [19.5, -15], [-8, -19.5], [8, -19.5]]
         .map(([x, z]) => brazier(ctx, x, z));
       backdrop(ctx, { cx: 0, cz: 0, radius: 60, seed: 77 });
     },
@@ -258,19 +258,21 @@ export const LEVELS = [
     },
   },
   {
-    id: 3, numeral: 'III', name: 'The Twin Flames', rect: [-69, -41, -59, -25.5],
+    id: 3, numeral: 'III', name: 'Marrow’s Rounds', rect: [-69, -41, -59, -25.5], v2: true,
     spawn: [-55, -27.5, 0],
-    objective: 'Two relics, two halves of a span. Raise one, then reach the other.',
-    relics: [
-      { id: 'A', at: [-61, -30], aim: 'a', startDeg: -40, speed: 45 },
-      { id: 'B', at: [-58.5, -42.5], aim: 'b', startDeg: 75, speed: 45 },
-    ],
-    runes: [
-      { id: 'a', at: [-53, -43.2], relics: ['A'], tol: 6, bridge: { axis: 'z', from: -35.4, to: -40.6 } },
-      { id: 'b', at: [-50, -54], relics: ['B'], tol: 6, bridge: { axis: 'z', from: -45.4, to: -50.6 } },
-    ],
+    objective: 'Reach the island, then the far door.',
+    // Introduce: Marrow's echo walks her rounds on the near platform; her lantern is a fire, so it
+    // sweeps stone A's shadow across the first gap twice a loop. Step on as it arrives.
+    // Twist: on the island, kindle the sconce: its fire throws island stone B's shadow to the far side.
+    // Marrow's patrol is tuned (light map) to ≈4 s crossings every ≈12 s; the island sconce sits
+    // 0.5 m beyond the farthest her sweep can reach, so lighting it stays the Keeper's job.
+    stones: [{ id: 'A', at: [-55, -34.5] }, { id: 'B', at: [-51.5, -44.9] }],
+    runes: [],
+    sconces: [{ id: 'isl', at: [-51.5, -42.6], burn: 20 }],
+    marrow: { path: [{ x: -64, z: -32, wait: 1 }, { x: -46, z: -32, wait: 1 }], speed: 1.6 },
     ember: [-62.5, -55],
-    onComplete: { gates: ['g_L3'] },
+    hints: ['Watch my rounds, child. The shadow comes to you.', 'Step on as it arrives. Step off before it leaves.'],
+    onComplete: { gates: ['g_L3', 'g_L4', 'g_sc_w', 'g_hub_n'], story: 'rev1' },
     build(ctx) {
       platform(ctx, { x0: -68, x1: -42, z0: -36, z1: -26 });
       platform(ctx, { x0: -62, x1: -48, z0: -46, z1: -40, depth: 3 });
@@ -280,21 +282,16 @@ export const LEVELS = [
       wallX(ctx, -58.45, -68.9, -41.1, 7, [-55], G);
       pillar(ctx, -66.5, -34, { h: 8 }); pillar(ctx, -43.5, -34, { h: 8, broken: true });
       pillar(ctx, -66.5, -52, { h: 8, broken: true }); pillar(ctx, -43.5, -52, { h: 8 });
-      brazier(ctx, -66.5, -27.5); brazier(ctx, -43.5, -27.5); brazier(ctx, -61, -45);
+      // (the island brazier at (-61, -45) stood within reach of stone B — removed: rule 1)
+      brazier(ctx, -66.5, -27.5); brazier(ctx, -43.5, -27.5);
       rubble(ctx, -45, -30, 6);
     },
   },
   {
-    id: 4, numeral: 'IV', name: 'The Measured Shadow', rect: [-73, -37, -97, -66.5],
+    id: 4, numeral: '', name: 'The Measured Walk', rect: [-73, -37, -97, -66.5], v2: true, passage: true, openWith: 3,
     spawn: [-55, -68.5, 0],
-    objective: 'A shadow has a length. Find where the relic must stand.',
-    relics: [{
-      id: 'A', aim: 'a', startDeg: -55, speed: 40, len: 18.11,
-      rail: { from: [-66, -72], to: [-46, -72], slots: 3, start: 0, solve: 2, lever: [-58, -69.4] },
-    }],
-    runes: [{ id: 'a', at: [-44, -90], relics: ['A'], tol: 6, lenTol: 0.7, origin: [-46, -72], bridge: { axis: 'z', from: -77.4, to: -84.6 } }],
-    ember: [-48, -93.6],
-    onComplete: { gates: ['g_L4', 'g_sc_w', 'g_hub_n'], story: 'rev1' },
+    stones: [], runes: [],
+    bridges: [{ from: [-55, -77.4], to: [-55, -84.6] }],
     build(ctx) {
       platform(ctx, { x0: -72, x1: -38, z0: -78, z1: -67 });
       platform(ctx, { x0: -72, x1: -38, z0: -96, z1: -84 });
@@ -302,9 +299,6 @@ export const LEVELS = [
       wallZ(ctx, -72.45, -78, -66.1, 6); wallZ(ctx, -72.45, -96.9, -84, 6);
       wallZ(ctx, -37.55, -78, -66.1, 6); wallZ(ctx, -37.55, -96.9, -84, 6, [-90], G);
       wallX(ctx, -96.45, -72.9, -37.1, 7);
-      // distance marks along the near edge (one per metre from the rail) — a ruler for the eye
-      for (let i = 0; i < 6; i++) rubble(ctx, -70.5 + i * 0.01, -76.5, 1, 0.3);
-      read(ctx, 'L4_hint', -69.5, -69.5, 0.8, COLORS.target);
       pillar(ctx, -70, -80.5, { h: 8, collide: false }); pillar(ctx, -40, -80.5, { h: 8, broken: true, collide: false });
       brazier(ctx, -70, -68.5); brazier(ctx, -40, -68.5); brazier(ctx, -70, -94);
     },
@@ -338,19 +332,22 @@ export const LEVELS = [
     },
   },
   {
-    id: 6, numeral: 'VI', name: 'The Relay', rect: [-15, 19, -95, -62],
+    id: 6, numeral: 'V', name: 'The Fire Road', rect: [-15, 19, -95, -62], v2: true,
     spawn: [-1, -64, 0],
-    objective: 'A cold relic lies beyond the wall. Fire can travel along a shadow.',
-    relics: [
-      { id: 'A', at: [-8, -66], aim: 'r', startDeg: 70, speed: 45 },
-      { id: 'B', at: [8, -66], aim: 'b', startDeg: -15, mode: 'collar', collar: 15, speed: 26, echo: true, relayOnly: true, jolt: [{ toDeg: -140, dur: 1.3 }] },
-    ],
-    runes: [
-      { id: 'r', at: [-0.6, -72.6], relics: ['A'], tol: 7, relay: 'B', gate: 'g_L6m' },
-      { id: 'b', at: [12, -89], relics: ['B'], tol: 6, bridge: { axis: 'z', from: -73.4, to: -80.6 } },
+    objective: 'Open the inner door. Then cross.',
+    // Introduce: three sconces stand beyond a balustrade. Sweep stone W's shadow across them and the
+    // fire runs along it; the middle one's fire throws W's shadow onto the door rune.
+    // Twist: from the edge, throw stone S's shadow across the abyss onto the far sconce F; F's fire
+    // throws S's shadow back to you as a road.
+    stones: [{ id: 'W', at: [-9, -69] }, { id: 'S', at: [5, -81] }],
+    runes: [{ id: 'g', at: [-3, -69], stones: ['W'], gate: 'g_L6m' }],
+    sconces: [
+      { id: 's1', at: [-12.5, -72], warded: true }, { id: 's2', at: [-12.5, -69], warded: true }, { id: 's3', at: [-12.5, -66], warded: true },
+      { id: 'F', at: [5, -86], warded: true },
     ],
     ember: [15, -92],
-    onComplete: { gates: ['g_L6'] },
+    hints: ['Fire follows the shadow’s road.', 'A fire across the abyss can throw a road back to you.'],
+    onComplete: { gates: ['g_L6', 'g_L7', 'g_sc_n', 'g_hub_e', 'g_L8m', 'g_L8'], story: 'rev2' },
     build(ctx) {
       platform(ctx, { x0: -14, x1: 3, z0: -76, z1: -62.5 });
       platform(ctx, { x0: 2, x1: 18, z0: -74, z1: -62.5 });
@@ -362,52 +359,33 @@ export const LEVELS = [
       wallZ(ctx, 18.45, -74, -62.05, 6); wallZ(ctx, 18.45, -94.9, -80, 6, [-88], G);
       wallZ(ctx, 1.55, -94.9, -80, 6);
       wallX(ctx, -94.45, 1.1, 18.9, 7);
-      read(ctx, 'L6_hint', -12.5, -64, 2.2);
-      pillar(ctx, -12, -74, { h: 8 }); pillar(ctx, 16.5, -72, { h: 8, broken: true }); pillar(ctx, 16.5, -82, { h: 8 });
-      brazier(ctx, -12.5, -70); brazier(ctx, 16.5, -64); brazier(ctx, 4, -92.5);
+      balustrade(ctx, { x0: -10, z0: -76, x1: -10, z1: -62.5 }); // the sconce gallery: only a shadow reaches it
+      read(ctx, 'L6_hint', -8.6, -63.6, Math.PI / 2 + 0.6);
+      pillar(ctx, -12, -74.6, { h: 8 }); pillar(ctx, 16.5, -72, { h: 8, broken: true }); pillar(ctx, 16.5, -82, { h: 8 });
+      // (the brazier at (-12.5, -70) became the sconce gallery: rule 1)
+      brazier(ctx, 16.5, -64); brazier(ctx, 4, -92.5);
     },
   },
   {
-    id: 7, numeral: 'VII', name: 'The Crossroads', rect: [24, 50, -96, -55],
-    spawn: [26, -88, -Math.PI / 2], flameSeconds: 10,
-    objective: 'One flame, three cold relics. Only one bears the door’s sign.',
-    relics: [
-      // decoys: their shadows CAN reach the door's rune — and are rejected ("wrong sign")
-      { id: 'W', at: [28.5, -70], aim: 'c', startDeg: 70, speed: 50, cold: true, emblem: 'wave' },
-      { id: 'S', at: [28.5, -92], aim: 'c', startDeg: 60, speed: 50, cold: true, emblem: 'spiral' },
-      { id: 'C', at: [46, -92], aim: 'c', startDeg: 95, speed: 50, cold: true, emblem: 'eye' },
-    ],
-    runes: [
-      { id: 'c', at: [33, -65.5], relics: ['C'], tol: 6, gate: 'g_L7', emblem: 'eye', stele: false },
-    ],
-    ember: [33, -57.6],
-    onComplete: { gates: ['g_sc_n', 'g_hub_e'], story: 'rev2' },
+    id: 7, numeral: '', name: 'The Crossroads', rect: [24, 50, -96, -55], v2: true, passage: true, openWith: 6,
+    spawn: [26, -88, -Math.PI / 2],
+    stones: [], runes: [],
     build(ctx) {
       platform(ctx, { x0: 24.5, x1: 49, z0: -95, z1: -62 });
       wallZ(ctx, 24.05, -95.9, -61.1, 6, [-88], DOOR);
       wallZ(ctx, 49.45, -95.9, -61.1, 6);
       wallX(ctx, -95.45, 23.6, 49.9, 7);
       wallX(ctx, -61.55, 23.6, 49.9, 7, [33], G);
-      wallX(ctx, -84, 38, 49, 4);           // inner wall: the eye relic is behind it
-      brazier(ctx, 36, -80, { eternal: true });
-      read(ctx, 'L7_hint', 31.5, -63.5, 0.4, COLORS.target);
+      wallX(ctx, -84, 38, 49, 4);
+      brazier(ctx, 36, -80);
       pillar(ctx, 44, -66, { h: 8 }); pillar(ctx, 27, -80, { h: 8, broken: true });
     },
   },
   {
-    id: 8, numeral: 'VIII', name: 'The Clockwork Span', rect: [32, 62, -20, 16],
-    spawn: [33.5, 0, -Math.PI / 2], flameSeconds: 12,
-    objective: 'Open the inner door, carry the flame, mend the memory, cross in time.',
-    relics: [
-      { id: 'A', aim: 'g', startDeg: 100, speed: 45, len: 13.51, rail: { from: [35.5, -10], to: [35.5, 8], slots: 3, start: 0, solve: 1, lever: [37.9, -5.2] } },
-      { id: 'B', at: [44, -8], aim: 'b', startDeg: -18, mode: 'collar', collar: 15, speed: 24, cold: true, sweepFlash: true, memory: 6, jolt: [{ toDeg: 130, dur: 1.0 }, { toDeg: 60, dur: 0.5 }], slip: [{ toDeg: 55, dur: 0.6 }] },
-    ],
-    runes: [
-      { id: 'g', at: [36, 12.5], relics: ['A'], tol: 7, lenTol: 0.7, gate: 'g_L8m', stele: false },
-      { id: 'b', at: [57.5, -4], relics: ['B'], tol: 6, bridge: { axis: 'x', from: 46.4, to: 53.6, duration: 9 } },
-    ],
-    ember: [58, 11],
-    onComplete: { gates: ['g_L8'] },
+    id: 8, numeral: '', name: 'The Clockwork Span', rect: [32, 62, -20, 16], v2: true, passage: true, openWith: 6,
+    spawn: [33.5, 0, -Math.PI / 2],
+    stones: [], runes: [],
+    bridges: [{ from: [46.4, -4], to: [53.6, -4] }],
     build(ctx) {
       platform(ctx, { x0: 32, x1: 47, z0: -15, z1: 15 });
       platform(ctx, { x0: 53, x1: 61, z0: -15, z1: 15 });
@@ -420,26 +398,25 @@ export const LEVELS = [
       platform(ctx, { x0: 33, x1: 37, z0: -19, z1: -14.5 });
       wallZ(ctx, 32.55, -19.9, -15.9, 4); wallZ(ctx, 37.45, -19.9, -15.9, 4); wallX(ctx, -19.45, 32.1, 37.9, 4);
       read(ctx, 'S3', 35, -18.6, 0);
-      brazier(ctx, 37.6, -12.6, { eternal: true });
+      brazier(ctx, 37.6, -12.6);
       pillar(ctx, 45.5, 13.5, { h: 9 }); pillar(ctx, 45.5, -13.5, { h: 9, broken: true });
       pillar(ctx, 59.5, 13.5, { h: 9, broken: true }); pillar(ctx, 59.5, -13.5, { h: 9 });
       brazier(ctx, 59.5, 0);
     },
   },
   {
-    id: 9, numeral: 'IX', name: 'The Mirror Hall', rect: [23, 64, 26.5, 59], quiet: true,
+    id: 9, numeral: 'VI', name: 'The Mirror Hall', rect: [23, 68, 26.5, 59], v2: true, quiet: true,
     spawn: [57, 28.5, Math.PI],
-    objective: 'Three relics, one chain of fire.',
-    relics: [
-      { id: 'A', at: [60, 31], aim: 'r', startDeg: 80, speed: 45 },
-      { id: 'B', at: [57, 54], aim: 'c', startDeg: 18, mode: 'collar', collar: 15, speed: 24, relayOnly: true, sweepFlash: true, memory: 6, jolt: [{ toDeg: 140, dur: 0.9 }, { toDeg: 60, dur: 0.7 }, { toDeg: 175, dur: 0.8 }] },
-      { id: 'C', aim: 'x', startDeg: 60, speed: 40, relayOnly: true, len: 16.28, rail: { from: [39, 37.4], to: [44, 37.4], slots: 3, start: 0, solve: 2, lever: [41.5, 40] } },
+    objective: '',
+    // No lessons: relay (Ilen's shadow of A lights the grilled sconce E; E throws A's shadow to the
+    // island), rail (slide R to the island's edge so a light can stand behind it), echo (it holds
+    // R's shadow across the second gap).
+    stones: [
+      { id: 'A', at: [56.5, 42] },
+      { id: 'R', rail: { from: [44, 42], to: [39.2, 42], slots: 2, start: 0, lever: [42, 46.6] } },
     ],
-    runes: [
-      { id: 'r', at: [53.5, 49.5], relics: ['A'], tol: 6, relay: 'B', stele: false },
-      { id: 'c', at: [40.5, 45.5], relics: ['B'], tol: 6, relay: 'C', bridge: { axis: 'x', from: 50.6, to: 44.4 } },
-      { id: 'x', at: [28, 34], relics: ['C'], tol: 6, lenTol: 0.7, origin: [44, 37.4], bridge: { axis: 'x', from: 38.6, to: 32.4, duration: 7 } },
-    ],
+    runes: [],
+    sconces: [{ id: 'E', at: [65.5, 42], warded: true }],
     ember: [27, 55],
     onComplete: { gates: ['g_L9', 'g_sc_e'], story: 'ring_wakes' },
     build(ctx) {
@@ -448,32 +425,42 @@ export const LEVELS = [
       platform(ctx, { x0: 24, x1: 33, z0: 27, z1: 58 });
       wallX(ctx, 26.55, 49.1, 63.9, 6, [57], DOOR); wallX(ctx, 26.55, 23.1, 33, 6, [28], G);
       wallX(ctx, 58.45, 49.1, 63.9, 6); wallX(ctx, 58.45, 23.1, 33, 6);
-      wallZ(ctx, 63.45, 26.1, 58.9, 6); wallZ(ctx, 23.55, 26.1, 58.9, 6);
-      pillar(ctx, 51.5, 56.5, { h: 10 }); pillar(ctx, 61.5, 44, { h: 10, broken: true });
+      wallZ(ctx, 63.45, 26.1, 58.9, 6, [42], 2.4); wallZ(ctx, 23.55, 26.1, 58.9, 6);
+      // the grilled niche: a sconce only a shadow can reach
+      platform(ctx, { x0: 63, x1: 67, z0: 40.4, z1: 43.6, depth: 1 });
+      wallX(ctx, 40.15, 63.45, 67.9, 6); wallX(ctx, 43.85, 63.45, 67.9, 6); wallZ(ctx, 67.45, 40.15, 43.85, 6);
+      grille(ctx, { x: 63.3, z0: 40.6, z1: 43.4 });
+      pillar(ctx, 51.5, 56.5, { h: 10 }); pillar(ctx, 61.5, 44.8, { h: 10, broken: true });
       pillar(ctx, 25.5, 44, { h: 10 }); pillar(ctx, 31.5, 56.5, { h: 10, broken: true });
       statue(ctx, 30, 52, Math.PI / 2, 0.8, true);
-      brazier(ctx, 61.5, 28.5); brazier(ctx, 51.5, 28.5); brazier(ctx, 43.5, 47.5); brazier(ctx, 25.5, 28.5);
+      // (the island brazier at (43.5, 47.5) stood within reach of stone R — removed: rule 1)
+      brazier(ctx, 61.5, 28.5); brazier(ctx, 51.5, 28.5); brazier(ctx, 25.5, 28.5);
     },
   },
   {
-    id: 10, numeral: 'X', name: 'The Heart of Minutes', rect: [-23, 23, -23, 23], hub: true, quiet: true,
-    spawn: [0, 19, 0], flameSeconds: 14,
-    objective: 'Hold all three shadows on the Heart at once.',
-    relics: [
-      { id: 'S', aim: 's', startDeg: 120, speed: 40, dormant: true, len: 13.72, hold: 30, slip: [{ toDeg: 50, dur: 0.6 }], rail: { from: [-6, 20.5], to: [-6, 13.5], slots: 3, start: 0, solve: 1, lever: [-3.6, 17] } },
-      { id: 'W', at: [-14.5, -6.5], aim: 'w', startDeg: -20, mode: 'collar', collar: 15, speed: 24, echo: true, dormant: true, hold: 30, memory: 6, jolt: [{ toDeg: 120, dur: 0.8 }, { toDeg: -150, dur: 1.2 }], slip: [{ toDeg: 45, dur: 0.6 }] },
-      { id: 'E', at: [14.5, 6.5], aim: 'e', startDeg: 90, speed: 45, cold: true, dormant: true, hold: 30, slip: [{ toDeg: 60, dur: 0.6 }] },
+    id: 10, numeral: '', name: 'The Heart of Minutes', rect: [-23, 23, -23, 23], v2: true, hub: true, quiet: true,
+    spawn: [0, 19, 0], maxEchoes: 2, echoPermanent: true,
+    objective: 'Hold all three shadows on the Heart.',
+    // Three ring stones wake with the ring; each must hold its shadow on a Heart socket at the same
+    // time. One Keeper cannot hold three: Ilen leaves two permanent echoes behind.
+    stones: [
+      { id: 'W', at: [-12.5, -4], dormant: true },
+      { id: 'E', at: [12.5, -4], dormant: true },
+      { id: 'S', dormant: true, rail: { from: [-6, 20.5], to: [-6, 13.5], slots: 3, start: 0, lever: [-3.6, 17] } },
     ],
     runes: [
-      { id: 's', at: [-1.6, 4.0], relics: ['S'], tol: 6, lenTol: 0.7, origin: [-6, 17], socket: true, stele: false },
-      { id: 'w', at: [-3.6, -1.5], relics: ['W'], tol: 6, socket: true, stele: false },
-      { id: 'e', at: [3.6, -1.5], relics: ['E'], tol: 6, socket: true, stele: false },
+      { id: 'w', at: [-3.6, -1.5], stones: ['W'], socket: true, stele: false },
+      { id: 'e', at: [3.6, -1.5], stones: ['E'], socket: true, stele: false },
+      { id: 's', at: [-1.6, 4.0], stones: ['S'], socket: true, tip: true, tol: 0.8, lat: 1.0, stele: false },
     ],
     finalBridge: { from: [0, -11.6], to: [0, -3.8] },
-    ember: [0, -2.8], emberY: 1.4,
+    ember: [0, -2.8], emberY: 1.4, emberAfterSockets: true,
+    hints: ['One Keeper cannot hold three shadows.', 'Leave yourself where the light must stay.'],
     onComplete: { story: 'finale' },
-    build(ctx) {
-      ctx.ringHearth = brazier(ctx, 16.5, -15.5, { eternal: true, dormant: true });
-    },
+    build() {},
   },
 ];
+
+// The six rooms, in the order the Keeper meets them (level ids reuse the geometry they stand in).
+export const ROOMS = [1, 2, 3, 5, 6, 9];
+export const ROOM_COUNT = ROOMS.length;
