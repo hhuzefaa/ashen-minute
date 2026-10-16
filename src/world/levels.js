@@ -1,0 +1,472 @@
+import { platform, wall, pillar, brazier, rubble, inscription, backdrop, wallX, wallZ, rail, statue, lightShaft } from '../objects/Environment.js';
+import { COLORS } from '../game/Palette.js';
+
+// ===============================================================================================
+// THE TEMPLE OF MINUTES — one continuous world. x = east, -z = north, 1 unit ≈ 1 m.
+//
+//            [L7 Crossroads]──┐                          (north wing)
+//   [L6 Relay]───────────────┘│
+//        │                    │ shortcut
+//   [L5 Bent Memory]          │
+//        │                    │
+// [L4]   N gate     shortcut ─┘
+//  │  └shortcut┐  ┌──────────┐            [L9 Mirror Hall]──┐
+// [L3]         ├──┤   HUB    ├── E gate ── [L8 Clockwork]───┘ shortcut back to hub
+//  │           │  │ (L10)    │
+// [L2]── W gate┘  └──────────┘
+//                      │ gallery
+//                 [L1 Threshold]
+//                      │
+//                  Entrance terrace (start)
+// ===============================================================================================
+
+// Gates: every one is a real door slab with collision. `open` = open at the start of a new game.
+export const GATES = [
+  { id: 'g_entry', x: 0, z: 62, axis: 'x', open: true },
+  { id: 'g_L1', x: 0, z: 33.05, axis: 'x' },
+  { id: 'g_hub_w', x: -22.45, z: 0, axis: 'z' },
+  { id: 'g_L2', x: -55, z: -12.45, axis: 'x' },
+  { id: 'g_L3', x: -55, z: -58.45, axis: 'x' },
+  { id: 'g_L4', x: -37.55, z: -90, axis: 'z' },
+  { id: 'g_sc_w', x: -22.45, z: -16, axis: 'z' },
+  { id: 'g_hub_n', x: 0, z: -22.45, axis: 'x' },
+  { id: 'g_L5', x: 0, z: -58.45, axis: 'x' },
+  { id: 'g_L6m', x: 2.45, z: -69, axis: 'z' },
+  { id: 'g_L6', x: 18.45, z: -88, axis: 'z' },
+  { id: 'g_L7', x: 33, z: -61.55, axis: 'x', emblem: 'eye' },
+  { id: 'g_sc_n', x: 16, z: -22.45, axis: 'x' },
+  { id: 'g_hub_e', x: 22.45, z: 0, axis: 'z' },
+  { id: 'g_L8m', x: 39.95, z: 4, axis: 'z' },
+  { id: 'g_L8', x: 57, z: 15.45, axis: 'x' },
+  { id: 'g_L9', x: 28, z: 26.55, axis: 'x' },
+  { id: 'g_sc_e', x: 22.45, z: 13, axis: 'z' },
+];
+const G = 5.2;   // wall gap that a gate fills exactly
+const DOOR = 6.2; // plain doorway width (corridor mouths)
+
+// Lore inscriptions / optional discoveries (ids map to story.js READINGS)
+const read = (ctx, id, x, z, yaw, color = COLORS.time) => {
+  inscription(ctx, x, z, yaw, { color, intensity: 0.9, seed: id.length * 7 + x });
+  ctx.readables.push({ id, x, z });
+};
+
+// ------------------------------------------------------------------------------------------------
+// Static zones that are not puzzles: entrance + gallery, the hub, and corridors.
+export const ZONES = [
+  {
+    key: 'south', rect: [-14, 14, 21, 80],
+    build(ctx) {
+      // Entrance terrace — open to the sky and the drop; the temple rises ahead
+      platform(ctx, { x0: -7, x1: 7, z0: 61.5, z1: 78 });
+      wallZ(ctx, -7.45, 62, 78, 1.4, [], 0, { ruin: 0.6 });
+      wallZ(ctx, 7.45, 62, 78, 1.4, [], 0, { ruin: 0.6 });
+      statue(ctx, -4.6, 73.5, 0, 0.75, true);
+      statue(ctx, 4.6, 73.5, 0, 0.75, false);
+      lightShaft(ctx, 0, 70, 16, 3);
+      // Gallery between Threshold and the hub (+ optional alcove S1)
+      platform(ctx, { x0: -3, x1: 3, z0: 21.5, z1: 33.6 });
+      wallZ(ctx, -3.45, 21.5, 33.1, 6);
+      wallZ(ctx, 3.45, 21.5, 33.1, 6, [28.5], 3.4);
+      platform(ctx, { x0: 2.5, x1: 7, z0: 26.5, z1: 30.5 });
+      wallZ(ctx, 7.45, 26.05, 30.95, 4);
+      wallX(ctx, 26.05, 3.9, 7.9, 4);
+      wallX(ctx, 30.95, 3.9, 7.9, 4);
+      read(ctx, 'S1', 6.6, 28.5, -Math.PI / 2, COLORS.target);
+      lightShaft(ctx, 0, 27, 12, 1.6, 0x9fb5d8, 0.05);
+      backdrop(ctx, { cx: 0, cz: 55, radius: 40, seed: 5 });
+    },
+  },
+  {
+    key: 'hub', rect: [-23, 23, -23, 23],
+    build(ctx) {
+      // ring walkway around the chasm, island with the dead Heart Ember
+      platform(ctx, { x0: -22, x1: 22, z0: 11, z1: 22 });
+      platform(ctx, { x0: -22, x1: 22, z0: -22, z1: -11 });
+      platform(ctx, { x0: -22, x1: -11, z0: -11, z1: 11 });
+      platform(ctx, { x0: 11, x1: 22, z0: -11, z1: 11 });
+      platform(ctx, { x0: -4.5, x1: 4.5, z0: -4.5, z1: 4.5, depth: 3 });
+      wallX(ctx, 22.45, -22.9, 22.9, 9, [0], DOOR);
+      wallZ(ctx, -22.45, -22.9, 22.9, 9, [0, -16], G);
+      wallX(ctx, -22.45, -22.9, 22.9, 9, [0, 16], G);
+      wallZ(ctx, 22.45, -22.9, 22.9, 9, [0, 13], G);
+      // colonnade at the chasm's edge (the final bridge path at x=0, z<-4 stays clear)
+      for (const v of [-15, -7.5, 7.5, 15]) {
+        pillar(ctx, v, 12.3, { h: 11 }); pillar(ctx, v, -12.3, { h: 11, broken: v === -7.5 });
+        pillar(ctx, -12.3, v, { h: 11, broken: v === 7.5 }); pillar(ctx, 12.3, v, { h: 11 });
+      }
+      for (const [x, z] of [[-19, 19], [19, 19], [-19, -19], [19, -19]]) statue(ctx, x, z, Math.atan2(x, z) + Math.PI, 1.25, x > 0 && z < 0);
+      // ten braziers: one wakes for every level restored (environmental progress)
+      ctx.progressBraziers = [[-8, 19.5], [8, 19.5], [-19.5, 7], [-19.5, -7], [-8, -19.5], [8, -19.5], [19.5, -7], [19.5, 7], [-14, 16], [14, 16]]
+        .map(([x, z]) => brazier(ctx, x, z));
+      lightShaft(ctx, 0, 0, 22, 5, 0x9fb5d8, 0.06);
+      lightShaft(ctx, -16, 0, 14, 2, 0x9fb5d8, 0.04);
+      lightShaft(ctx, 16, 0, 14, 2, 0x9fb5d8, 0.04);
+      backdrop(ctx, { cx: 0, cz: 0, radius: 60, seed: 77 });
+    },
+  },
+  {
+    key: 'cw1', rect: [-35, -22, -4, 4],
+    build(ctx) {
+      platform(ctx, { x0: -34.5, x1: -21.5, z0: -3, z1: 3 });
+      wallX(ctx, -3.45, -34, -22.9, 5); wallX(ctx, 3.45, -34, -22.9, 5);
+    },
+  },
+  {
+    key: 'cw2', rect: [-59, -51, -26, -12],
+    build(ctx) {
+      platform(ctx, { x0: -58, x1: -52, z0: -25.6, z1: -12.4 });
+      wallZ(ctx, -58.45, -25.6, -12.9, 5); wallZ(ctx, -51.55, -25.6, -12.9, 5);
+    },
+  },
+  {
+    key: 'cw3', rect: [-59, -51, -67, -58],
+    build(ctx) {
+      platform(ctx, { x0: -58, x1: -52, z0: -66.6, z1: -57.6 });
+      wallZ(ctx, -58.45, -66.6, -58.9, 5); wallZ(ctx, -51.55, -66.6, -58.9, 5);
+    },
+  },
+  {
+    key: 'cn2', rect: [-4, 4, -63, -58],
+    build(ctx) {
+      platform(ctx, { x0: -3, x1: 3, z0: -63, z1: -57.6 });
+      wallZ(ctx, -3.45, -62.05, -58.9, 5); wallZ(ctx, 3.45, -62.05, -58.9, 5);
+    },
+  },
+  {
+    key: 'cn3', rect: [18, 25, -92, -84],
+    build(ctx) {
+      platform(ctx, { x0: 17.5, x1: 25, z0: -91, z1: -85 });
+      wallX(ctx, -91.45, 18.9, 24.05, 5); wallX(ctx, -84.55, 18.9, 24.05, 5);
+    },
+  },
+  {
+    key: 'ce2', rect: [53, 61, 15, 27],
+    build(ctx) {
+      platform(ctx, { x0: 54, x1: 60, z0: 14.6, z1: 27.5 });
+      wallZ(ctx, 53.55, 15.9, 26.55, 5); wallZ(ctx, 60.45, 15.9, 26.55, 5);
+    },
+  },
+  {
+    key: 'sc_w', rect: [-38, -22, -94, -12],
+    build(ctx) {
+      // the long return walkway from the Measured Shadow back into the hub (a Zelda-style loop)
+      platform(ctx, { x0: -38.5, x1: -28, z0: -93, z1: -87 });
+      platform(ctx, { x0: -34, x1: -28, z0: -93, z1: -13 });
+      platform(ctx, { x0: -34, x1: -21.5, z0: -19, z1: -13 });
+      wallX(ctx, -93.45, -37.5, -27.55, 3);
+      wallX(ctx, -86.55, -37.5, -34.45, 3);
+      wallZ(ctx, -27.55, -93.9, -19.45, 3);
+      wallZ(ctx, -34.45, -86.55, -12.55, 3);
+      wallX(ctx, -19.45, -27.55, -22.9, 3);
+      wallX(ctx, -12.55, -34.9, -22.9, 3);
+      for (const z of [-80, -64, -48, -32]) { pillar(ctx, -27.0, z, { h: 6, collide: false }); }
+    },
+  },
+  {
+    key: 'cn1', rect: [-4, 4, -33, -22],
+    build(ctx) {
+      platform(ctx, { x0: -3, x1: 3, z0: -32.5, z1: -21.5 });
+      wallZ(ctx, -3.45, -32, -22.9, 6); wallZ(ctx, 3.45, -32, -22.9, 6);
+    },
+  },
+  {
+    key: 'sc_n', rect: [12, 37, -62, -22],
+    build(ctx) {
+      platform(ctx, { x0: 30, x1: 36, z0: -62.5, z1: -28 });
+      platform(ctx, { x0: 13, x1: 36, z0: -34, z1: -28 });
+      platform(ctx, { x0: 13, x1: 19, z0: -28, z1: -21.5 });
+      wallZ(ctx, 29.55, -61.1, -34.45, 3);
+      wallZ(ctx, 36.45, -61.1, -27.55, 3);
+      wallX(ctx, -34.45, 12.55, 29.55, 3);
+      wallX(ctx, -27.55, 19.45, 36.9, 3);
+      wallZ(ctx, 12.55, -34.9, -22.9, 3);
+      wallZ(ctx, 19.45, -27.55, -22.9, 3);
+    },
+  },
+  {
+    key: 'ce1', rect: [22, 33, -4, 4],
+    build(ctx) {
+      platform(ctx, { x0: 21.5, x1: 32.5, z0: -3, z1: 3 });
+      wallX(ctx, -3.45, 22.9, 32, 5); wallX(ctx, 3.45, 22.9, 32, 5);
+    },
+  },
+  {
+    key: 'sc_e', rect: [21, 32, 9, 28],
+    build(ctx) {
+      // return walkway from the Mirror Hall to the Sanctuary's south-east door
+      platform(ctx, { x0: 25, x1: 31, z0: 10, z1: 27.5 });
+      platform(ctx, { x0: 21.5, x1: 31, z0: 10, z1: 16 });
+      wallZ(ctx, 24.55, 16.45, 26.1, 3);
+      wallZ(ctx, 31.45, 9.55, 26.1, 3);
+      wallX(ctx, 9.55, 22.9, 31.9, 3);
+      wallX(ctx, 16.45, 22.9, 24.55, 3);
+    },
+  },
+];
+
+// ------------------------------------------------------------------------------------------------
+// The ten levels. Relic/rune fields are documented in docs/LEVEL_DESIGN.md.
+export const LEVELS = [
+  {
+    id: 1, numeral: 'I', name: 'The Threshold', rect: [-10, 10, 33, 62],
+    spawn: [0, 58, 0], quiet: true,
+    objective: 'Light the relic. Turn it until its shadow touches the golden rune.',
+    relics: [{ id: 'A', at: [-2.5, 52], aim: 'a', startDeg: 35, speed: 50 }],
+    runes: [{ id: 'a', at: [2.5, 38.6], relics: ['A'], tol: 8, bridge: { axis: 'z', from: 47.6, to: 42.9 } }],
+    ember: [-4, 36.4],
+    onComplete: { gates: ['g_L1', 'g_hub_w'] },
+    build(ctx) {
+      platform(ctx, { x0: -9, x1: 9, z0: 47, z1: 62 });
+      platform(ctx, { x0: -9, x1: 9, z0: 33.5, z1: 43.5 });
+      for (const x of [-9.45, 9.45]) { wallZ(ctx, x, 47, 62, 6); wallZ(ctx, x, 33.05, 43.5, 6); }
+      wallX(ctx, 33.05, -9.9, 9.9, 7, [0], G);
+      pillar(ctx, -7.4, 55, { h: 8 }); pillar(ctx, 7.4, 55, { h: 8, broken: true });
+      pillar(ctx, -7.4, 41, { h: 8, broken: true }); pillar(ctx, 7.4, 41, { h: 8 });
+      brazier(ctx, -6.5, 59); brazier(ctx, 6.5, 59); brazier(ctx, -6.5, 35.5); brazier(ctx, 6.5, 35.5);
+      rubble(ctx, -7.6, 48.5, 6); rubble(ctx, 7.8, 36.5, 5);
+    },
+  },
+  {
+    id: 2, numeral: 'II', name: 'The Echo Court', rect: [-61, -33.5, -13, 17],
+    spawn: [-36, 0, Math.PI / 2],
+    objective: 'The relic was wrenched from its angle. Find what it remembers.',
+    relics: [{ id: 'A', at: [-40, 3.5], aim: 'a', startDeg: -16, mode: 'collar', collar: 15, speed: 26, echo: true, jolt: [{ toDeg: -150, dur: 1.5 }] }],
+    runes: [{ id: 'a', at: [-55.5, -4.5], relics: ['A'], tol: 6, bridge: { axis: 'x', from: -45.4, to: -50.6 } }],
+    ember: [-57.6, -9.6],
+    onComplete: { gates: ['g_L2'] },
+    build(ctx) {
+      platform(ctx, { x0: -46, x1: -34, z0: -12, z1: 12 });
+      platform(ctx, { x0: -60, x1: -50, z0: -12, z1: 12 });
+      wallZ(ctx, -33.55, -12.9, 12.9, 6, [0], DOOR);
+      wallX(ctx, 12.45, -46.9, -33.1, 6, [-40], 3.4);
+      wallX(ctx, 12.45, -60.9, -50, 6);
+      wallX(ctx, -12.45, -46.9, -33.1, 6);
+      wallX(ctx, -12.45, -60.9, -50, 6, [-55], G);
+      wallZ(ctx, -60.45, -12.9, 12.9, 6);
+      // alcove S2
+      platform(ctx, { x0: -42, x1: -38, z0: 11.5, z1: 16 });
+      wallZ(ctx, -42.45, 12.9, 16.9, 4); wallZ(ctx, -37.55, 12.9, 16.9, 4); wallX(ctx, 16.45, -42.9, -37.1, 4);
+      read(ctx, 'S2', -40, 15.6, Math.PI);
+      read(ctx, 'L2_echo', -36.6, 8.6, -2.2);
+      pillar(ctx, -44.5, 10.5, { h: 7 }); pillar(ctx, -44.5, -10.5, { h: 7, broken: true });
+      pillar(ctx, -51.5, 10.5, { h: 7, broken: true }); pillar(ctx, -51.5, -10.5, { h: 7 });
+      brazier(ctx, -35.5, 10.5); brazier(ctx, -35.5, -10.5); brazier(ctx, -58.5, 10.5);
+      rubble(ctx, -58.5, 4, 6);
+    },
+  },
+  {
+    id: 3, numeral: 'III', name: 'The Twin Flames', rect: [-69, -41, -59, -25.5],
+    spawn: [-55, -27.5, 0],
+    objective: 'Two relics, two halves of a span. Raise one, then reach the other.',
+    relics: [
+      { id: 'A', at: [-61, -30], aim: 'a', startDeg: -40, speed: 45 },
+      { id: 'B', at: [-58.5, -42.5], aim: 'b', startDeg: 75, speed: 45 },
+    ],
+    runes: [
+      { id: 'a', at: [-53, -43.2], relics: ['A'], tol: 6, bridge: { axis: 'z', from: -35.4, to: -40.6 } },
+      { id: 'b', at: [-50, -54], relics: ['B'], tol: 6, bridge: { axis: 'z', from: -45.4, to: -50.6 } },
+    ],
+    ember: [-62.5, -55],
+    onComplete: { gates: ['g_L3'] },
+    build(ctx) {
+      platform(ctx, { x0: -68, x1: -42, z0: -36, z1: -26 });
+      platform(ctx, { x0: -62, x1: -48, z0: -46, z1: -40, depth: 3 });
+      platform(ctx, { x0: -68, x1: -42, z0: -58, z1: -50 });
+      wallX(ctx, -25.55, -68.9, -41.1, 6, [-55], DOOR);
+      for (const x of [-68.45, -41.55]) { wallZ(ctx, x, -36, -25.1, 6); wallZ(ctx, x, -58.9, -50, 6); }
+      wallX(ctx, -58.45, -68.9, -41.1, 7, [-55], G);
+      pillar(ctx, -66.5, -34, { h: 8 }); pillar(ctx, -43.5, -34, { h: 8, broken: true });
+      pillar(ctx, -66.5, -52, { h: 8, broken: true }); pillar(ctx, -43.5, -52, { h: 8 });
+      brazier(ctx, -66.5, -27.5); brazier(ctx, -43.5, -27.5); brazier(ctx, -61, -45);
+      rubble(ctx, -45, -30, 6);
+    },
+  },
+  {
+    id: 4, numeral: 'IV', name: 'The Measured Shadow', rect: [-73, -37, -97, -66.5],
+    spawn: [-55, -68.5, 0],
+    objective: 'A shadow has a length. Find where the relic must stand.',
+    relics: [{
+      id: 'A', aim: 'a', startDeg: -55, speed: 40, len: 18.11,
+      rail: { from: [-66, -72], to: [-46, -72], slots: 3, start: 0, solve: 2, lever: [-58, -69.4] },
+    }],
+    runes: [{ id: 'a', at: [-44, -90], relics: ['A'], tol: 6, lenTol: 0.7, origin: [-46, -72], bridge: { axis: 'z', from: -77.4, to: -84.6 } }],
+    ember: [-48, -93.6],
+    onComplete: { gates: ['g_L4', 'g_sc_w', 'g_hub_n'], story: 'rev1' },
+    build(ctx) {
+      platform(ctx, { x0: -72, x1: -38, z0: -78, z1: -67 });
+      platform(ctx, { x0: -72, x1: -38, z0: -96, z1: -84 });
+      wallX(ctx, -66.55, -72.9, -37.1, 6, [-55], DOOR);
+      wallZ(ctx, -72.45, -78, -66.1, 6); wallZ(ctx, -72.45, -96.9, -84, 6);
+      wallZ(ctx, -37.55, -78, -66.1, 6); wallZ(ctx, -37.55, -96.9, -84, 6, [-90], G);
+      wallX(ctx, -96.45, -72.9, -37.1, 7);
+      // distance marks along the near edge (one per metre from the rail) — a ruler for the eye
+      for (let i = 0; i < 6; i++) rubble(ctx, -70.5 + i * 0.01, -76.5, 1, 0.3);
+      read(ctx, 'L4_hint', -69.5, -69.5, 0.8, COLORS.target);
+      pillar(ctx, -70, -80.5, { h: 8, collide: false }); pillar(ctx, -40, -80.5, { h: 8, broken: true, collide: false });
+      brazier(ctx, -70, -68.5); brazier(ctx, -40, -68.5); brazier(ctx, -70, -94);
+    },
+  },
+  {
+    id: 5, numeral: 'V', name: 'The Bent Memory', rect: [-13, 13, -59, -31.5],
+    spawn: [0, -33.6, 0],
+    objective: 'Watch the rune. The answer passed through the relic’s past.',
+    relics: [{
+      id: 'A', at: [4.5, -37], aim: 'a', startDeg: 40, mode: 'collar', collar: 15, speed: 22, memory: 8, rewindSpeed: 0.9,
+      sweepFlash: true, rewindSolves: false,
+      jolt: [{ toDeg: 120, dur: 0.6 }, { toDeg: -60, dur: 2.6 }, { toDeg: -170, dur: 0.7 }], // only the slow middle swing crosses the answer
+    }],
+    runes: [{ id: 'a', at: [-4, -53.5], relics: ['A'], tol: 5, bridge: { axis: 'z', from: -43.4, to: -48.6 } }],
+    ember: [6, -55.5],
+    onComplete: { gates: ['g_L5'] },
+    build(ctx) {
+      platform(ctx, { x0: -12, x1: 12, z0: -44, z1: -32 });
+      platform(ctx, { x0: -12, x1: 12, z0: -58, z1: -48 });
+      wallX(ctx, -31.55, -12.9, 12.9, 6, [0], DOOR);
+      for (const x of [-12.45, 12.45]) { wallZ(ctx, x, -44, -31.1, 6); wallZ(ctx, x, -58.9, -48, 6); }
+      wallX(ctx, -58.45, -12.9, 12.9, 7, [0], G);
+      read(ctx, 'L5_hint', 9.5, -34, -0.9);
+      pillar(ctx, -10.5, -36, { h: 9 }); pillar(ctx, 10.5, -42, { h: 9, broken: true });
+      pillar(ctx, -10.5, -56, { h: 9, broken: true }); pillar(ctx, 10.5, -50, { h: 9 });
+      brazier(ctx, -10.5, -33.5); brazier(ctx, -10.5, -42.5); brazier(ctx, 10.5, -56.5);
+    },
+  },
+  {
+    id: 6, numeral: 'VI', name: 'The Relay', rect: [-15, 19, -95, -62],
+    spawn: [-1, -64, 0],
+    objective: 'A cold relic lies beyond the wall. Fire can travel along a shadow.',
+    relics: [
+      { id: 'A', at: [-8, -66], aim: 'r', startDeg: 70, speed: 45 },
+      { id: 'B', at: [8, -66], aim: 'b', startDeg: -15, mode: 'collar', collar: 15, speed: 26, echo: true, relayOnly: true, jolt: [{ toDeg: -140, dur: 1.3 }] },
+    ],
+    runes: [
+      { id: 'r', at: [-0.6, -72.6], relics: ['A'], tol: 7, relay: 'B', gate: 'g_L6m' },
+      { id: 'b', at: [12, -89], relics: ['B'], tol: 6, bridge: { axis: 'z', from: -73.4, to: -80.6 } },
+    ],
+    ember: [15, -92],
+    onComplete: { gates: ['g_L6'] },
+    build(ctx) {
+      platform(ctx, { x0: -14, x1: 3, z0: -76, z1: -62.5 });
+      platform(ctx, { x0: 2, x1: 18, z0: -74, z1: -62.5 });
+      platform(ctx, { x0: 2, x1: 18, z0: -94, z1: -80 });
+      wallX(ctx, -62.05, -14.9, 18.9, 6, [0], DOOR);
+      wallZ(ctx, -14.45, -76.9, -62.05, 6);
+      wallX(ctx, -76.45, -14.9, 2.9, 6);
+      wallZ(ctx, 2.45, -76, -62.5, 6, [-69], G);
+      wallZ(ctx, 18.45, -74, -62.05, 6); wallZ(ctx, 18.45, -94.9, -80, 6, [-88], G);
+      wallZ(ctx, 1.55, -94.9, -80, 6);
+      wallX(ctx, -94.45, 1.1, 18.9, 7);
+      read(ctx, 'L6_hint', -12.5, -64, 2.2);
+      pillar(ctx, -12, -74, { h: 8 }); pillar(ctx, 16.5, -72, { h: 8, broken: true }); pillar(ctx, 16.5, -82, { h: 8 });
+      brazier(ctx, -12.5, -70); brazier(ctx, 16.5, -64); brazier(ctx, 4, -92.5);
+    },
+  },
+  {
+    id: 7, numeral: 'VII', name: 'The Crossroads', rect: [24, 50, -96, -55],
+    spawn: [26, -88, -Math.PI / 2], flameSeconds: 10,
+    objective: 'One flame, three cold relics. Only one bears the door’s sign.',
+    relics: [
+      // decoys: their shadows CAN reach the door's rune — and are rejected ("wrong sign")
+      { id: 'W', at: [28.5, -70], aim: 'c', startDeg: 70, speed: 50, cold: true, emblem: 'wave' },
+      { id: 'S', at: [28.5, -92], aim: 'c', startDeg: 60, speed: 50, cold: true, emblem: 'spiral' },
+      { id: 'C', at: [46, -92], aim: 'c', startDeg: 95, speed: 50, cold: true, emblem: 'eye' },
+    ],
+    runes: [
+      { id: 'c', at: [33, -65.5], relics: ['C'], tol: 6, gate: 'g_L7', emblem: 'eye', stele: false },
+    ],
+    ember: [33, -57.6],
+    onComplete: { gates: ['g_sc_n', 'g_hub_e'], story: 'rev2' },
+    build(ctx) {
+      platform(ctx, { x0: 24.5, x1: 49, z0: -95, z1: -62 });
+      wallZ(ctx, 24.05, -95.9, -61.1, 6, [-88], DOOR);
+      wallZ(ctx, 49.45, -95.9, -61.1, 6);
+      wallX(ctx, -95.45, 23.6, 49.9, 7);
+      wallX(ctx, -61.55, 23.6, 49.9, 7, [33], G);
+      wallX(ctx, -84, 38, 49, 4);           // inner wall: the eye relic is behind it
+      brazier(ctx, 36, -80, { eternal: true });
+      read(ctx, 'L7_hint', 31.5, -63.5, 0.4, COLORS.target);
+      pillar(ctx, 44, -66, { h: 8 }); pillar(ctx, 27, -80, { h: 8, broken: true });
+    },
+  },
+  {
+    id: 8, numeral: 'VIII', name: 'The Clockwork Span', rect: [32, 62, -20, 16],
+    spawn: [33.5, 0, -Math.PI / 2], flameSeconds: 12,
+    objective: 'Open the inner door, carry the flame, mend the memory, cross in time.',
+    relics: [
+      { id: 'A', aim: 'g', startDeg: 100, speed: 45, len: 13.51, rail: { from: [35.5, -10], to: [35.5, 8], slots: 3, start: 0, solve: 1, lever: [37.9, -5.2] } },
+      { id: 'B', at: [44, -8], aim: 'b', startDeg: -18, mode: 'collar', collar: 15, speed: 24, cold: true, sweepFlash: true, memory: 6, jolt: [{ toDeg: 130, dur: 1.0 }, { toDeg: 60, dur: 0.5 }], slip: [{ toDeg: 55, dur: 0.6 }] },
+    ],
+    runes: [
+      { id: 'g', at: [36, 12.5], relics: ['A'], tol: 7, lenTol: 0.7, gate: 'g_L8m', stele: false },
+      { id: 'b', at: [57.5, -4], relics: ['B'], tol: 6, bridge: { axis: 'x', from: 46.4, to: 53.6, duration: 9 } },
+    ],
+    ember: [58, 11],
+    onComplete: { gates: ['g_L8'] },
+    build(ctx) {
+      platform(ctx, { x0: 32, x1: 47, z0: -15, z1: 15 });
+      platform(ctx, { x0: 53, x1: 61, z0: -15, z1: 15 });
+      wallZ(ctx, 31.55, -15.9, 15.9, 6, [0], DOOR);
+      wallZ(ctx, 39.95, -15.9, 15.9, 6, [4], G);
+      wallX(ctx, -15.45, 31.1, 47, 6, [35], 3.4); wallX(ctx, -15.45, 53, 61.9, 6);
+      wallX(ctx, 15.45, 31.1, 47, 6); wallX(ctx, 15.45, 53, 61.9, 6, [57], G);
+      wallZ(ctx, 61.45, -15.9, 15.9, 6);
+      // alcove S3
+      platform(ctx, { x0: 33, x1: 37, z0: -19, z1: -14.5 });
+      wallZ(ctx, 32.55, -19.9, -15.9, 4); wallZ(ctx, 37.45, -19.9, -15.9, 4); wallX(ctx, -19.45, 32.1, 37.9, 4);
+      read(ctx, 'S3', 35, -18.6, 0);
+      brazier(ctx, 37.6, -12.6, { eternal: true });
+      pillar(ctx, 45.5, 13.5, { h: 9 }); pillar(ctx, 45.5, -13.5, { h: 9, broken: true });
+      pillar(ctx, 59.5, 13.5, { h: 9, broken: true }); pillar(ctx, 59.5, -13.5, { h: 9 });
+      brazier(ctx, 59.5, 0);
+    },
+  },
+  {
+    id: 9, numeral: 'IX', name: 'The Mirror Hall', rect: [23, 64, 26.5, 59], quiet: true,
+    spawn: [57, 28.5, Math.PI],
+    objective: 'Three relics, one chain of fire.',
+    relics: [
+      { id: 'A', at: [60, 31], aim: 'r', startDeg: 80, speed: 45 },
+      { id: 'B', at: [57, 54], aim: 'c', startDeg: 18, mode: 'collar', collar: 15, speed: 24, relayOnly: true, sweepFlash: true, memory: 6, jolt: [{ toDeg: 140, dur: 0.9 }, { toDeg: 60, dur: 0.7 }, { toDeg: 175, dur: 0.8 }] },
+      { id: 'C', aim: 'x', startDeg: 60, speed: 40, relayOnly: true, len: 16.28, rail: { from: [39, 37.4], to: [44, 37.4], slots: 3, start: 0, solve: 2, lever: [41.5, 40] } },
+    ],
+    runes: [
+      { id: 'r', at: [53.5, 49.5], relics: ['A'], tol: 6, relay: 'B', stele: false },
+      { id: 'c', at: [40.5, 45.5], relics: ['B'], tol: 6, relay: 'C', bridge: { axis: 'x', from: 50.6, to: 44.4 } },
+      { id: 'x', at: [28, 34], relics: ['C'], tol: 6, lenTol: 0.7, origin: [44, 37.4], bridge: { axis: 'x', from: 38.6, to: 32.4, duration: 7 } },
+    ],
+    ember: [27, 55],
+    onComplete: { gates: ['g_L9', 'g_sc_e'], story: 'ring_wakes' },
+    build(ctx) {
+      platform(ctx, { x0: 50, x1: 63, z0: 27, z1: 58 });
+      platform(ctx, { x0: 38, x1: 45, z0: 35, z1: 49, depth: 3 });
+      platform(ctx, { x0: 24, x1: 33, z0: 27, z1: 58 });
+      wallX(ctx, 26.55, 49.1, 63.9, 6, [57], DOOR); wallX(ctx, 26.55, 23.1, 33, 6, [28], G);
+      wallX(ctx, 58.45, 49.1, 63.9, 6); wallX(ctx, 58.45, 23.1, 33, 6);
+      wallZ(ctx, 63.45, 26.1, 58.9, 6); wallZ(ctx, 23.55, 26.1, 58.9, 6);
+      pillar(ctx, 51.5, 56.5, { h: 10 }); pillar(ctx, 61.5, 44, { h: 10, broken: true });
+      pillar(ctx, 25.5, 44, { h: 10 }); pillar(ctx, 31.5, 56.5, { h: 10, broken: true });
+      statue(ctx, 30, 52, Math.PI / 2, 0.8, true);
+      brazier(ctx, 61.5, 28.5); brazier(ctx, 51.5, 28.5); brazier(ctx, 43.5, 47.5); brazier(ctx, 25.5, 28.5);
+    },
+  },
+  {
+    id: 10, numeral: 'X', name: 'The Heart of Minutes', rect: [-23, 23, -23, 23], hub: true, quiet: true,
+    spawn: [0, 19, 0], flameSeconds: 14,
+    objective: 'Hold all three shadows on the Heart at once.',
+    relics: [
+      { id: 'S', aim: 's', startDeg: 120, speed: 40, dormant: true, len: 13.72, hold: 30, slip: [{ toDeg: 50, dur: 0.6 }], rail: { from: [-6, 20.5], to: [-6, 13.5], slots: 3, start: 0, solve: 1, lever: [-3.6, 17] } },
+      { id: 'W', at: [-14.5, -6.5], aim: 'w', startDeg: -20, mode: 'collar', collar: 15, speed: 24, echo: true, dormant: true, hold: 30, memory: 6, jolt: [{ toDeg: 120, dur: 0.8 }, { toDeg: -150, dur: 1.2 }], slip: [{ toDeg: 45, dur: 0.6 }] },
+      { id: 'E', at: [14.5, 6.5], aim: 'e', startDeg: 90, speed: 45, cold: true, dormant: true, hold: 30, slip: [{ toDeg: 60, dur: 0.6 }] },
+    ],
+    runes: [
+      { id: 's', at: [-1.6, 4.0], relics: ['S'], tol: 6, lenTol: 0.7, origin: [-6, 17], socket: true, stele: false },
+      { id: 'w', at: [-3.6, -1.5], relics: ['W'], tol: 6, socket: true, stele: false },
+      { id: 'e', at: [3.6, -1.5], relics: ['E'], tol: 6, socket: true, stele: false },
+    ],
+    finalBridge: { from: [0, -11.6], to: [0, -3.8] },
+    ember: [0, -2.8], emberY: 1.4,
+    onComplete: { story: 'finale' },
+    build(ctx) {
+      ctx.ringHearth = brazier(ctx, 16.5, -15.5, { eternal: true, dormant: true });
+    },
+  },
+];

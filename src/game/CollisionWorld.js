@@ -1,14 +1,24 @@
 // Simple, deterministic collision: oriented boxes (yaw only) for floors, walls and bridges.
 // Decorative meshes are never colliders (doc §12.1). Bridge colliders are toggled by ShadowBridge.
 
+const CELL = 8;
+
 export class CollisionWorld {
   constructor() {
     this.colliders = [];
+    this.grid = new Map();   // static colliders bucketed by XZ cell
+    this.dynamic = [];       // colliders that move (rail pedestals) — always checked
+    this._set = new Set();
+    this._list = [];
   }
 
-  clear() { this.colliders.length = 0; }
+  clear() {
+    this.colliders.length = 0;
+    this.grid.clear();
+    this.dynamic.length = 0;
+  }
 
-  /** c: { cx, cy, cz, hx, hy, hz, yaw?, tag?, enabled? } */
+  /** c: { cx, cy, cz, hx, hy, hz, yaw?, tag?, enabled?, dynamic? } */
   add(c) {
     c.yaw = c.yaw ?? 0;
     c.enabled = c.enabled ?? true;
@@ -16,7 +26,35 @@ export class CollisionWorld {
     c.cos = Math.cos(c.yaw);
     c.sin = Math.sin(c.yaw);
     this.colliders.push(c);
+    if (c.dynamic) { this.dynamic.push(c); return c; }
+    const r = Math.hypot(c.hx, c.hz); // conservative XZ bounds for rotated boxes
+    const x0 = Math.floor((c.cx - r) / CELL), x1 = Math.floor((c.cx + r) / CELL);
+    const z0 = Math.floor((c.cz - r) / CELL), z1 = Math.floor((c.cz + r) / CELL);
+    for (let i = x0; i <= x1; i++) for (let j = z0; j <= z1; j++) {
+      const k = i * 100003 + j;
+      let b = this.grid.get(k);
+      if (!b) { b = []; this.grid.set(k, b); }
+      b.push(c);
+    }
     return c;
+  }
+
+  /** Update a dynamic collider's transform. */
+  move(c, cx, cz) { c.cx = cx; c.cz = cz; }
+
+  /** Candidate colliders overlapping the XZ rectangle. */
+  query(minX, minZ, maxX, maxZ) {
+    const out = this._list, seen = this._set;
+    out.length = 0; seen.clear();
+    const x0 = Math.floor(minX / CELL), x1 = Math.floor(maxX / CELL);
+    const z0 = Math.floor(minZ / CELL), z1 = Math.floor(maxZ / CELL);
+    for (let i = x0; i <= x1; i++) for (let j = z0; j <= z1; j++) {
+      const b = this.grid.get(i * 100003 + j);
+      if (!b) continue;
+      for (const c of b) if (!seen.has(c)) { seen.add(c); out.push(c); }
+    }
+    for (const c of this.dynamic) out.push(c);
+    return out;
   }
 
   addBox(x0, y0, z0, x1, y1, z1, tag = 'solid') {
@@ -39,7 +77,7 @@ export class CollisionWorld {
   /** Highest walkable top under (x,z) that is not above footY + step. -Infinity if none. */
   groundHeight(x, z, footY, step = 0.4, margin = 0.12) {
     let best = -Infinity;
-    for (const c of this.colliders) {
+    for (const c of this.query(x - 1, z - 1, x + 1, z + 1)) {
       if (!c.enabled) continue;
       const top = c.cy + c.hy;
       if (top > footY + step || top < best) continue;
@@ -51,7 +89,7 @@ export class CollisionWorld {
 
   /** Which tagged collider (if any) is directly under the point. */
   standingOn(x, z, footY, tag) {
-    for (const c of this.colliders) {
+    for (const c of this.query(x - 1, z - 1, x + 1, z + 1)) {
       if (!c.enabled || c.tag !== tag) continue;
       const top = c.cy + c.hy;
       if (Math.abs(top - footY) > 0.25) continue;
@@ -65,7 +103,7 @@ export class CollisionWorld {
   resolveCylinder(pos, radius, height, step = 0.4) {
     for (let pass = 0; pass < 3; pass++) {
       let moved = false;
-      for (const c of this.colliders) {
+      for (const c of this.query(pos.x - radius - 1, pos.z - radius - 1, pos.x + radius + 1, pos.z + radius + 1)) {
         if (!c.enabled) continue;
         const top = c.cy + c.hy, bottom = c.cy - c.hy;
         if (top <= pos.y + step || bottom >= pos.y + height) continue; // walkable or overhead
@@ -97,7 +135,7 @@ export class CollisionWorld {
   /** Segment (a -> b) vs solid boxes: returns fraction [0..1] of the first hit, or 1. Used by the camera. */
   raycastFraction(a, b, tags = null) {
     let tMin = 1;
-    for (const c of this.colliders) {
+    for (const c of this.query(Math.min(a.x, b.x) - 1, Math.min(a.z, b.z) - 1, Math.max(a.x, b.x) + 1, Math.max(a.z, b.z) + 1)) {
       if (!c.enabled) continue;
       if (tags && !tags.includes(c.tag)) continue;
       const [ax, az] = this._local(c, a.x, a.z);

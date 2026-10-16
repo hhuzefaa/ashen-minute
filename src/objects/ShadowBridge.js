@@ -21,7 +21,7 @@ export class ShadowBridge {
     this.length = Math.hypot(dir.x, dir.z);
     this.yaw = Math.atan2(-dir.x, -dir.z); // slabs run along local -Z
     this.group = new THREE.Group();
-    this.group.position.set((start.x + end.x) / 2, 0, (start.z + end.z) / 2);
+    this.group.position.set((start.x + end.x) / 2, start.y || 0, (start.z + end.z) / 2);
     this.group.rotation.y = this.yaw;
     this.state = BRIDGE.HIDDEN;
     this.t = 0;
@@ -76,7 +76,7 @@ export class ShadowBridge {
     this.group.add(this.outline);
 
     this.collider = world.add({
-      cx: this.group.position.x, cy: -THICK / 2, cz: this.group.position.z,
+      cx: this.group.position.x, cy: this.group.position.y - THICK / 2, cz: this.group.position.z,
       hx: WIDTH / 2, hy: THICK / 2, hz: this.length / 2 + 0.05, yaw: this.yaw, tag: 'bridge', enabled: false,
     });
   }
@@ -147,5 +147,7 @@ export class ShadowBridge {
     }
     const outlineTarget = this.outlineOn && this.state === BRIDGE.HIDDEN ? 0.35 + 0.15 * Math.sin(this.time * 2) : 0;
     this.outlineMat.opacity += (outlineTarget - this.outlineMat.opacity) * Math.min(1, dt * 4);
+    this.outline.visible = this.outlineMat.opacity > 0.004;
+    this.group.visible = this.state !== BRIDGE.HIDDEN || this.outline.visible;
   }
 }

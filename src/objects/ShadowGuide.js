@@ -28,7 +28,7 @@ export class ShadowGuide {
     this.relic = relic;
     this.length = length;
     this.group = new THREE.Group();
-    this.group.position.set(relic.base.x, 0.035, relic.base.z);
+    this.group.position.set(relic.base.x, relic.base.y + 0.035, relic.base.z);
     this.visibility = 0;
     this.alignment = 0; // 0..1 closeness
     this.time = 0;
@@ -145,5 +145,10 @@ export class ShadowGuide {
     // trail
     const tOn = (this.trailOn || focus) && lit ? (rewinding ? 0.9 : 0.45) : 0;
     this.trailMat.opacity += (tOn - this.trailMat.opacity) * Math.min(1, dt * 8);
+    // skip drawing entirely while invisible (draw-call budget)
+    this.rotor.visible = this.visibility > 0.004;
+    this.echo.visible = this.echoRimMat.opacity > 0.004;
+    this.trail.visible = this.trailMat.opacity > 0.004;
+    this.focusLine.visible = this.focusMat.opacity > 0.004;
   }
 }

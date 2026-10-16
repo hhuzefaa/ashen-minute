@@ -79,3 +79,43 @@ export function runeTexture(kind = 'target', seed = 3) {
   cache.set(key, tex);
   return tex;
 }
+
+/** Small emblem glyphs used to match relics with doors (wave, eye, spiral, sun). */
+export function emblemTexture(kind) {
+  const key = 'emblem-' + kind;
+  if (cache.has(key)) return cache.get(key);
+  const s = 128;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = s;
+  const g = cv.getContext('2d');
+  g.translate(s / 2, s / 2);
+  g.strokeStyle = '#fff';
+  g.fillStyle = '#fff';
+  g.lineWidth = 7;
+  g.lineCap = 'round';
+  g.lineJoin = 'round';
+  g.beginPath(); g.arc(0, 0, 56, 0, Math.PI * 2); g.lineWidth = 4; g.stroke(); g.lineWidth = 7;
+  if (kind === 'wave') {
+    for (const y of [-16, 6, 28]) {
+      g.beginPath();
+      g.moveTo(-36, y);
+      g.bezierCurveTo(-18, y - 18, -6, y + 10, 8, y - 6);
+      g.bezierCurveTo(18, y - 16, 28, y - 4, 36, y - 12);
+      g.stroke();
+    }
+  } else if (kind === 'eye') {
+    g.beginPath(); g.moveTo(-40, 0); g.quadraticCurveTo(0, -36, 40, 0); g.quadraticCurveTo(0, 36, -40, 0); g.stroke();
+    g.beginPath(); g.arc(0, 0, 11, 0, Math.PI * 2); g.fill();
+  } else if (kind === 'spiral') {
+    g.beginPath();
+    for (let t = 0; t < 14; t += 0.1) { const r = t * 3; const x = Math.cos(t) * r, y = Math.sin(t) * r; t ? g.lineTo(x, y) : g.moveTo(x, y); }
+    g.stroke();
+  } else if (kind === 'sun') {
+    g.beginPath(); g.arc(0, 0, 16, 0, Math.PI * 2); g.stroke();
+    for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; g.beginPath(); g.moveTo(Math.cos(a) * 24, Math.sin(a) * 24); g.lineTo(Math.cos(a) * 40, Math.sin(a) * 40); g.stroke(); }
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  cache.set(key, tex);
+  return tex;
+}

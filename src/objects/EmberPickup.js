@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { COLORS } from '../game/Palette.js';
+import { LightSource } from '../game/LightPool.js';
 
 // OBJ_Ember_Pickup: a small faceted flame-crystal (~0.3 units) that hovers and spins.
 export function emberMesh(scale = 1) {
@@ -22,7 +23,7 @@ export class EmberPickup {
     this.group = emberMesh(1.15);
     this.base = position.clone();
     this.group.position.copy(position);
-    this.light = new THREE.PointLight(COLORS.fire, 2.5, 4, 2);
+    this.light = new LightSource(COLORS.fire, 2.5, 4, 2);
     this.group.add(this.light);
     this.collected = false;
     this.time = Math.random() * 10;

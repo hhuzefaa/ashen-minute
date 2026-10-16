@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { COLORS, stoneMaterial, makeRng } from '../game/Palette.js';
 import { runeTexture } from './Glyphs.js';
+import { LightSource } from '../game/LightPool.js';
 
 // Procedural architecture kit (ENV_* in the asset bible). All geometry is original.
 // ctx = { group, world, rng, lights: [], braziers: [] }
@@ -27,6 +29,30 @@ function mat(name) {
   return shared[name];
 }
 
+// Shared low-cost geometries (performance: a rounded box costs ~200 triangles, a box 12)
+const TILE_GEO = new THREE.BoxGeometry(0.97, 0.28, 0.97);
+const BLOCK_GEO = new THREE.BoxGeometry(1, 1, 1);
+const SPIKE_GEO = new THREE.ConeGeometry(0.6, 1.8, 5);
+
+/** Merge a group's meshes (same material) into one mesh = one draw call. */
+export function mergeGroup(g, material) {
+  g.updateMatrixWorld(true);
+  const parts = [];
+  g.traverse((o) => {
+    if (!o.isMesh) return;
+    let geo = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+    geo.deleteAttribute('uv1');
+    for (const k of Object.keys(geo.attributes)) if (!['position', 'normal', 'uv'].includes(k)) geo.deleteAttribute(k);
+    if (!geo.attributes.uv) geo.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(geo.attributes.position.count * 2), 2));
+    geo.applyMatrix4(o.matrixWorld);
+    parts.push(geo);
+  });
+  const merged = new THREE.Mesh(mergeGeometries(parts, false), material);
+  merged.castShadow = true;
+  merged.receiveShadow = true;
+  return merged;
+}
+
 const STONE_TONES = [0x3a3a4a, 0x343443, 0x40404f, 0x37374a, 0x464656, 0x2f2f3d];
 function tone(rng, lift = 0) {
   return _c.set(STONE_TONES[Math.floor(rng() * STONE_TONES.length)]).offsetHSL(0, 0, lift + (rng() - 0.5) * 0.03);
@@ -37,8 +63,7 @@ export function platform(ctx, { x0, x1, z0, z1, y = 0, depth = 1.8, crackChance 
   const { group, world, rng } = ctx;
   const w = x1 - x0, d = z1 - z0;
   const nx = Math.round(w), nz = Math.round(d);
-  const tileGeo = new RoundedBoxGeometry(0.97, 0.28, 0.97, 1, 0.04);
-  const tiles = new THREE.InstancedMesh(tileGeo, mat('tile'), nx * nz);
+  const tiles = new THREE.InstancedMesh(TILE_GEO, mat('tile'), nx * nz);
   let i = 0;
   for (let ix = 0; ix < nx; ix++) {
     for (let iz = 0; iz < nz; iz++) {
@@ -62,9 +87,8 @@ export function platform(ctx, { x0, x1, z0, z1, y = 0, depth = 1.8, crackChance 
   group.add(body);
 
   // hanging rock spikes along the underside (ENV_Platform_Edge dressing)
-  const spikeGeo = new THREE.ConeGeometry(0.6, 1.8, 5);
   const per = Math.max(4, Math.floor((w + d) * 0.6));
-  const spikes = new THREE.InstancedMesh(spikeGeo, mat('body'), per);
+  const spikes = new THREE.InstancedMesh(SPIKE_GEO, mat('body'), per);
   for (let k = 0; k < per; k++) {
     const onX = rng() < w / (w + d);
     const sx = onX ? x0 + 0.5 + rng() * (w - 1) : (rng() < 0.5 ? x0 + 0.6 : x1 - 0.6);
@@ -78,26 +102,6 @@ export function platform(ctx, { x0, x1, z0, z1, y = 0, depth = 1.8, crackChance 
   }
   group.add(spikes);
 
-  // broken lip along the edges: chunky stones slightly below the walk surface (never above it)
-  const lipGeo = new THREE.DodecahedronGeometry(0.32, 0);
-  const lipN = Math.floor((w + d) * 1.1);
-  const lip = new THREE.InstancedMesh(lipGeo, mat('tile'), lipN);
-  for (let k = 0; k < lipN; k++) {
-    const side = Math.floor(rng() * 4);
-    let lx, lz;
-    if (side === 0) { lx = x0 + rng() * w; lz = z0 - 0.05; }
-    else if (side === 1) { lx = x0 + rng() * w; lz = z1 + 0.05; }
-    else if (side === 2) { lx = x0 - 0.05; lz = z0 + rng() * d; }
-    else { lx = x1 + 0.05; lz = z0 + rng() * d; }
-    _p.set(lx, y - 0.45 - rng() * 0.5, lz);
-    _q.setFromEuler(_e.set(rng() * 6, rng() * 6, rng() * 6));
-    const sc = 0.6 + rng() * 0.9;
-    _s.set(sc, sc * 0.8, sc);
-    _m.compose(_p, _q, _s);
-    lip.setMatrixAt(k, _m);
-    lip.setColorAt(k, tone(rng, -0.05));
-  }
-  group.add(lip);
 
   world.addBox(x0, y - 2.2, z0, x1, y, z1, 'floor');
 }
@@ -110,8 +114,7 @@ export function wall(ctx, { x0, z0, x1, z1, h = 4, thick = 0.9, ruin = 0.35 }) {
   const bw = 1.2, bh = 0.6;
   const cols = Math.max(1, Math.round(len / bw));
   const rows = Math.round(h / bh);
-  const geo = new RoundedBoxGeometry(1, 1, 1, 1, 0.05);
-  const inst = new THREE.InstancedMesh(geo, mat('wall'), cols * rows);
+  const inst = new THREE.InstancedMesh(BLOCK_GEO, mat('wall'), cols * rows);
   let n = 0;
   const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
   const colH = [];
@@ -173,11 +176,11 @@ export function pillar(ctx, x, z, { h = 5, broken = false, collide = true, r = 0
     chunk.position.set((rng() - 0.5) * 1.6, r * 0.9, (rng() - 0.5) * 1.6);
     g.add(chunk);
   }
-  g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-  g.position.set(x, 0, z);
-  group.add(g);
+  const merged = mergeGroup(g, mat('pillar'));
+  merged.position.set(x, 0, z);
+  group.add(merged);
   if (collide) world.addBox(x - r * 1.3, 0, z - r * 1.3, x + r * 1.3, height, z + r * 1.3, 'wall');
-  return g;
+  return merged;
 }
 
 /** Exit arch (ENV_Exit_Arch). Returns { group, door } — door slab can slide open. */
@@ -220,7 +223,7 @@ export function arch(ctx, x, z, { width = 2.8, height = 3.6, yaw = 0, door = fal
 }
 
 /** Brazier (OBJ_Brazier): starts cold; Game lights it when the room's relic ignites. */
-export function brazier(ctx, x, z) {
+export function brazier(ctx, x, z, { eternal = false, lit = false, dormant = false } = {}) {
   const { group, world } = ctx;
   const g = new THREE.Group();
   const pts = [new THREE.Vector2(0.0, 0), new THREE.Vector2(0.28, 0), new THREE.Vector2(0.18, 0.15), new THREE.Vector2(0.14, 0.75),
@@ -235,11 +238,16 @@ export function brazier(ctx, x, z) {
   g.add(coals);
   g.position.set(x, 0, z);
   group.add(g);
-  const light = new THREE.PointLight(COLORS.fire, 0, 9, 1.6);
+  const light = new LightSource(COLORS.fire, 0, 9, 1.6);
   light.position.set(x, 1.6, z);
   group.add(light);
   world.addBox(x - 0.35, 0, z - 0.35, x + 0.35, 1.1, z + 0.35, 'wall');
-  const b = { pos: new THREE.Vector3(x, 1.12, z), light, coalsMat, lit: false, level: 0, delay: 0 };
+  const b = { pos: new THREE.Vector3(x, 1.12, z), light, coalsMat, lit: lit || (eternal && !dormant), level: lit || (eternal && !dormant) ? 1 : 0, delay: 0, eternal, group: g };
+  if (eternal) {
+    // eternal hearth: a ring of carved stones marks a flame you can take with your lantern
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.75, 0.08, 4, 16), new THREE.MeshBasicMaterial({ color: new THREE.Color(COLORS.fire).multiplyScalar(1.6), toneMapped: false }));
+    ring.rotation.x = -Math.PI / 2; ring.position.y = 0.04; g.add(ring);
+  }
   ctx.braziers.push(b);
   return b;
 }
@@ -322,4 +330,111 @@ export function backdrop(ctx, { cx = 0, cz = 0, radius = 34, seed = 11 }) {
     tower.position.set(tx, 0, tz);
     ctx.group.add(tower);
   }
+}
+
+
+// ---------------------------------------------------------------------------------------------
+// Higher-level builders for the connected temple
+
+/** Wall running along X at z, from x0 to x1, with door openings centred at `gaps` (width w). */
+export function wallX(ctx, z, x0, x1, h = 5, gaps = [], w = 3.6, opts = {}) {
+  let cur = Math.min(x0, x1);
+  const end = Math.max(x0, x1);
+  for (const g of [...gaps].sort((a, b) => a - b)) {
+    const a = g - w / 2, b = g + w / 2;
+    if (a - cur > 0.6) wall(ctx, { x0: cur, z0: z, x1: a, z1: z, h, ...opts });
+    cur = b;
+  }
+  if (end - cur > 0.6) wall(ctx, { x0: cur, z0: z, x1: end, z1: z, h, ...opts });
+}
+
+/** Wall running along Z at x, from z0 to z1, with door openings centred at `gaps`. */
+export function wallZ(ctx, x, z0, z1, h = 5, gaps = [], w = 3.6, opts = {}) {
+  let cur = Math.min(z0, z1);
+  const end = Math.max(z0, z1);
+  for (const g of [...gaps].sort((a, b) => a - b)) {
+    const a = g - w / 2, b = g + w / 2;
+    if (a - cur > 0.6) wall(ctx, { x0: x, z0: cur, x1: x, z1: a, h, ...opts });
+    cur = b;
+  }
+  if (end - cur > 0.6) wall(ctx, { x0: x, z0: cur, x1: x, z1: end, h, ...opts });
+}
+
+/** Sliding rail for a movable relic + its lever. Returns lever world position. */
+export function rail(ctx, from, to, slots, lever) {
+  const g = new THREE.Group();
+  const dx = to.x - from.x, dz = to.z - from.z;
+  const len = Math.hypot(dx, dz);
+  const yaw = Math.atan2(dx, dz);
+  for (const side of [-0.55, 0.55]) {
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.08, len + 1.4), mat('metal'));
+    bar.position.set((from.x + to.x) / 2 + Math.cos(yaw) * side, 0.04, (from.z + to.z) / 2 - Math.sin(yaw) * side);
+    bar.rotation.y = yaw;
+    g.add(bar);
+  }
+  // socket rings at each slot
+  for (let i = 0; i < slots; i++) {
+    const t = slots === 1 ? 0 : i / (slots - 1);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.85, 0.05, 4, 20), new THREE.MeshBasicMaterial({ color: new THREE.Color(COLORS.target).multiplyScalar(0.5) }));
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(from.x + dx * t, 0.03, from.z + dz * t);
+    g.add(ring);
+  }
+  // lever: a post with a handle
+  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 1.1, 6), mat('metal'));
+  post.position.set(lever.x, 0.55, lever.z);
+  const handle = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.7, 0.1), new THREE.MeshBasicMaterial({ color: new THREE.Color(COLORS.target).multiplyScalar(0.9) }));
+  handle.position.set(lever.x, 1.2, lever.z);
+  handle.rotation.z = 0.5;
+  g.add(post, handle);
+  ctx.group.add(g);
+  ctx.world.addBox(lever.x - 0.2, 0, lever.z - 0.2, lever.x + 0.2, 1.1, lever.z + 0.2, 'wall');
+  return { handle };
+}
+
+/** Broken colossal statue of a robed Keeper (landmark). */
+export function statue(ctx, x, z, yaw = 0, scale = 1, broken = true) {
+  const g = new THREE.Group();
+  const m = mat('pillar');
+  const base = new THREE.Mesh(new THREE.BoxGeometry(3.2, 1.2, 3.2), m);
+  base.position.y = 0.6;
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.5, 5.2, 7), m);
+  body.position.y = 1.2 + 2.6;
+  g.add(base, body);
+  if (!broken) {
+    const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.8, 0), m);
+    head.scale.set(1, 1.15, 1.1);
+    head.position.y = 7.2;
+    g.add(head);
+  } else {
+    const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.8, 0), m);
+    head.position.set(2.2, 0.7, 1.4);
+    head.rotation.set(0.6, 0.3, 1.2);
+    g.add(head);
+  }
+  // hands cupping an (unlit) bowl
+  const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.4, 0.5, 8, 1, true), m);
+  bowl.position.set(0, 4.2, -1.0);
+  g.add(bowl);
+  g.position.set(x, 0, z);
+  g.rotation.y = yaw;
+  g.scale.setScalar(scale);
+  const merged = mergeGroup(g, m);
+  ctx.group.add(merged);
+  ctx.world.addBox(x - 1.6 * scale, 0, z - 1.6 * scale, x + 1.6 * scale, 6 * scale, z + 1.6 * scale, 'wall');
+  return merged;
+}
+
+let shaftMat = null;
+/** Cheap volumetric light shaft (additive cone, no lighting cost). */
+export function lightShaft(ctx, x, z, h = 14, r = 2.2, color = 0x9fb5d8, opacity = 0.07) {
+  if (!shaftMat) shaftMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: true });
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.6, r, h, 12, 1, true), shaftMat.clone());
+  m.material.color.set(color).multiplyScalar(opacity * 10);
+  m.material.opacity = 0.1;
+  m.position.set(x, h / 2, z);
+  m.rotation.z = 0.12;
+  m.renderOrder = 4;
+  ctx.group.add(m);
+  return m;
 }

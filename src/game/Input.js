@@ -8,6 +8,8 @@ export class Input {
     this.pressed = new Set();
     this.mouseDX = 0;
     this.mouseDY = 0;
+    this.wheel = 0;
+    this.clicked = false;
     this.dragging = false;
     this.locked = false;
     this.onBlur = null; // callback set by Game
@@ -30,8 +32,10 @@ export class Input {
         this.mouseDY += e.movementY || 0;
       }
     });
+    canvas.addEventListener('wheel', (e) => { this.wheel += e.deltaY; e.preventDefault(); }, { passive: false });
     document.addEventListener('pointerlockchange', () => {
       this.locked = document.pointerLockElement === canvas;
+      if (!this.locked) { this.down.clear(); this.dragging = false; }
     });
   }
 
@@ -52,6 +56,7 @@ export class Input {
     this.down.clear();
     this.pressed.clear();
     this.mouseDX = this.mouseDY = 0;
+    this.wheel = 0;
     this.dragging = false;
     if (fromBlur && this.onBlur) this.onBlur();
   }
@@ -60,5 +65,6 @@ export class Input {
     this.pressed.clear();
     this.mouseDX = 0;
     this.mouseDY = 0;
+    this.wheel = 0;
   }
 }

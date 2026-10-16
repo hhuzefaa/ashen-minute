@@ -1,240 +1,439 @@
 """
-Automated end-to-end playthrough of Ashen Minutes in headless Chromium.
+End-to-end playthrough of all ten levels of Ashen Minutes in headless Chromium.
 
-Uses real keyboard input for every puzzle action (E ignite, A/D turn, R rewind, W walk across
-bridges). The only shortcut is teleporting the Keeper between points of interest so the script
-does not need path-finding; every bridge is still crossed on foot so its collider is exercised.
+Input is real: Playwright sends genuine keyboard events (E, A/D, R, W, Shift, Esc, Backspace) that
+go through the game's Input listeners. The render loop is stopped and the simulation is stepped
+explicitly (1/30 s per step) so results are deterministic and independent of how slow software
+WebGL is. Travel between puzzle stations uses teleports, but every bridge and every gate on the
+critical path is crossed on foot.
 
-Usage:
     npm run build && npx vite preview --port 4173 &
-    python3 tests/playthrough.py [--url http://localhost:4173] [--shots out_dir]
+    python3 tests/playthrough.py [--url ...] [--shots dir]
 """
 import argparse, math, os, sys, time
 from playwright.sync_api import sync_playwright
 
 ap = argparse.ArgumentParser()
-ap.add_argument('--url', default='http://localhost:4173/?test&nofallback&lowfx')
-ap.add_argument('--shots', default='test-shots')
-ap.add_argument('--w', type=int, default=480)
-ap.add_argument('--h', type=int, default=270)
+ap.add_argument('--url', default='http://localhost:4173/?test&lowfx')
+ap.add_argument('--shots', default='')
 args = ap.parse_args()
-os.makedirs(args.shots, exist_ok=True)
+if args.shots: os.makedirs(args.shots, exist_ok=True)
 
-errors, results = [], []
+S = 'window.__ashen'
+results, errors = [], []
 
 def check(name, ok, detail=''):
     results.append((name, bool(ok), detail))
     print(('PASS ' if ok else 'FAIL ') + name + (f'  [{detail}]' if detail else ''), flush=True)
 
-def wait_until(page, js, timeout=20.0, step=0.1):
-    t0 = time.time()
-    while time.time() - t0 < timeout:
-        if page.evaluate(js):
-            return True
-        time.sleep(step)
-    return False
-
-def shot(page, name):
-    page.screenshot(path=os.path.join(args.shots, name + '.png'))
-
-S = 'window.__ashen'
-P = S + '.levels.puzzle'
-
-def state(page):
-    return page.evaluate(f'{P} ? {P}.state : null')
-
-def err_deg(page):
-    return page.evaluate(f'''(() => {{ const p={P}; const d=Math.atan2(Math.sin(p.relic.yaw-p.targetYaw), Math.cos(p.relic.yaw-p.targetYaw)); return d*180/Math.PI; }})()''')
-
-def stand_at_relic(page):
-    # south-east of the relic (between player-spawn side and relic), camera looking at the target
-    page.evaluate(f'''(() => {{
-        const g={S}, p={P}, b=p.relic.base;
-        const fx=-Math.sin(p.targetYaw), fz=-Math.cos(p.targetYaw);
-        g.player.pos.set(b.x - fx*1.5, 0, b.z - fz*1.5); g.player.vel.set(0,0,0);
-        g.cameraCtl.yaw = p.targetYaw; g.cameraCtl.pitch = 0.35;
-    }})()''')
-    time.sleep(0.4)
-
-def key_toward_target(page):
-    """Mirror the game's camera-relative rule to pick A or D."""
-    return page.evaluate(f'''(() => {{
-        const p={P}, c={S}.cameraCtl, y=p.relic.yaw;
-        const s = (-Math.cos(y))*Math.cos(c.yaw) + (Math.sin(y))*(-Math.sin(c.yaw)) >= 0 ? 1 : -1; // D => +s
-        const need = -Math.sign(Math.atan2(Math.sin(y-p.targetYaw), Math.cos(y-p.targetYaw)));
-        return need === s ? 'KeyD' : 'KeyA';
-    }})()''')
-
-def turn_until_aligned(page, timeout=40):
-    t0 = time.time()
-    while time.time() - t0 < timeout:
-        if state(page) != 'ALIGNING':
-            return state(page)
-        key = key_toward_target(page)
-        page.keyboard.down(key)
-        wait_until(page, f'{P}.state !== "ALIGNING" || {P}.atLimit', 10)
-        page.keyboard.up(key)
-        time.sleep(0.3)
-        if state(page) == 'ALIGNING' and page.evaluate(f'{P}.atLimit'):
-            return 'COLLAR_LIMIT'
-    return state(page)
-
-def rewind_to_oldest(page, timeout=15):
-    page.keyboard.down('KeyR')
-    # already at the oldest memory (history collapsed to one sample) also counts
-    ok = wait_until(page, f'{P}.relic.history.atOldest || {P}.relic.history.length <= 1 || {P}.state !== "ALIGNING"', timeout)
-    time.sleep(0.15)
-    page.keyboard.up('KeyR')
-    time.sleep(0.2)
-    return ok
-
-def walk_bridge(page):
-    """Place the Keeper at the near end of the bridge and walk it with W."""
-    page.evaluate(f'''(() => {{
-        const g={S}, br={P}.bridge;
-        g.player.pos.set(br.start.x, 0, br.start.z + 0.6); g.player.vel.set(0,0,0);
-        g.cameraCtl.yaw = br.yaw; g.cameraCtl.pitch = 0.3;
-    }})()''')
-    time.sleep(0.3)
-    falls0 = page.evaluate(f'{S}.__falls || 0')
-    page.keyboard.down('KeyW')
-    crossed = wait_until(page, f'(() => {{ const g={S}; return g.player.pos.z < {P}.level.crossZ - 0.8; }})()', 12)
-    page.keyboard.up('KeyW')
-    falls1 = page.evaluate(f'{S}.__falls || 0')
-    return crossed and falls1 == falls0
-
-def grab_ember(page):
-    page.evaluate(f'''(() => {{ const g={S}, e={P}.ember.base; g.player.pos.set(e.x, 0, e.z + 0.3); g.player.vel.set(0,0,0); }})()''')
-
 with sync_playwright() as pw:
-    browser = pw.chromium.launch(args=['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required'])
-    page = browser.new_page(viewport={'width': args.w, 'height': args.h})
+    browser = pw.chromium.launch(args=['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'])
+    page = browser.new_page(viewport={'width': 640, 'height': 360})
     page.on('console', lambda m: errors.append(m.text) if m.type == 'error' else None)
     page.on('pageerror', lambda e: errors.append(str(e)))
     page.goto(args.url)
-    check('title screen loads', wait_until(page, f'{S} && {S}.state === "title"', 30))
-    page.evaluate(f'''{S}.player.onFall = ((orig) => () => {{ {S}.__falls = ({S}.__falls||0)+1; orig(); }})({S}.player.onFall)''')
-    time.sleep(2.5)
-    shot(page, '00_title')
+    page.wait_for_function(f'{S} && {S}.state === "title"', timeout=120000)
+    page.evaluate(f'''(() => {{
+      const g = {S};
+      g.renderer.setAnimationLoop(null);
+      window.__falls = 0;
+      const of = g.player.onFall; g.player.onFall = () => {{ window.__falls++; of(); }};
+      window.__adv = (sec) => {{
+        const n = Math.max(1, Math.round(sec * 30));
+        for (let i = 0; i < n; i++) {{ g.step(1/30); if (i === 0) {{ g.input.pressed.clear(); }} }}
+        g.input.endFrame();
+      }};
+    }})()''')
 
-    # controls / credits overlays open and close
-    page.dispatch_event('#screen-title button[data-action=controls]', 'click'); time.sleep(0.3)
-    check('controls overlay opens', page.is_visible('#screen-controls'))
-    page.dispatch_event('#screen-controls button[data-action=close-overlay]', 'click')
-    page.dispatch_event('#screen-title button[data-action=credits]', 'click'); time.sleep(0.3)
-    check('credits overlay opens', page.is_visible('#screen-credits'))
-    page.dispatch_event('#screen-credits button[data-action=close-overlay]', 'click')
+    def adv(sec): page.evaluate(f'window.__adv({sec})')
+    def ev(js): return page.evaluate(js)
+    def down(k): page.keyboard.down(k)
+    def up(k): page.keyboard.up(k)
+    def press(k, hold=0.1): down(k); adv(hold); up(k); adv(1/30)
+    def shot(name):
+        if not args.shots: return
+        ev(f'{S}.render()'); time.sleep(0.1)
+        page.screenshot(path=os.path.join(args.shots, name + '.png'))
+    P = f'{S}.world.activePuzzle'
+    def relic(rid): return f'{P}.relics.get("{rid}")'
 
-    page.dispatch_event('#screen-title button[data-action=play]', 'click')
-    check('play starts intro', wait_until(page, f'{S}.state === "intro"', 10))
-    time.sleep(1.2); shot(page, '01_intro_card')
-    check('intro hands over to play', wait_until(page, f'{S}.state === "playing"', 10))
-    check('ember count starts 0', page.evaluate(f'{S}.levels.emberCount') == 0)
-    time.sleep(1.0); shot(page, '02_room1_spawn')
+    def err_deg(rid):
+        return ev(f'''(() => {{ const p={P}, rs={relic(rid)}; const ru=p.runes.get(rs.spec.aim);
+          const a = p.aimYawFor(rs, ru); return Math.atan2(Math.sin(rs.relic.yaw-a), Math.cos(rs.relic.yaw-a)) * 180/Math.PI; }})()''')
 
-    # ---- movement sanity: W moves forward, walls block
-    z0 = page.evaluate(f'{S}.player.pos.z')
-    page.keyboard.down('KeyW'); time.sleep(1.0); page.keyboard.up('KeyW')
-    z1 = page.evaluate(f'{S}.player.pos.z')
-    check('W moves the Keeper forward (camera-relative)', z1 < z0 - 0.5, f'dz={z1-z0:.2f}')
-    page.evaluate(f'{S}.player.pos.set(5.5, 0, 4); {S}.cameraCtl.yaw = -Math.PI/2;')  # face east toward wall
-    page.keyboard.down('KeyW'); time.sleep(1.5); page.keyboard.up('KeyW')
-    x = page.evaluate(f'{S}.player.pos.x')
-    check('wall blocks the Keeper', x < 7.0, f'x={x:.2f}')
+    def stand_behind(rid, dist=1.6):
+        # behind the relic (opposite its target); if that is over the abyss, try around it
+        ev(f'''(() => {{ const g={S}, p={P}, rs={relic(rid)}, b=rs.relic.base, ru=p.runes.get(rs.spec.aim);
+          const a = p.aimYawFor(rs, ru);
+          for (const off of [0, 0.8, -0.8, 1.4, -1.4, 2.0, -2.0]) {{
+            const x = b.x + Math.sin(a + off)*{dist}, z = b.z + Math.cos(a + off)*{dist};
+            if (g.collision.groundHeight(x, z, b.y + 0.2) > -1) {{ g.player.pos.set(x, b.y, z); break; }}
+          }}
+          g.player.vel.set(0,0,0); g.cameraCtl.yaw = a; g.cameraCtl.pitch = 0.35; }})()''')
+        adv(0.2)
 
-    # ---- inactive bridge is not walkable: step into the gap → fall → respawn
-    f0 = page.evaluate(f'{S}.__falls||0')
-    page.evaluate(f'{S}.player.pos.set(0, 0, -2.5); {S}.player.vel.set(0,0,0);')
-    ok = wait_until(page, f'({S}.__falls||0) >= {f0 + 1}', 10)
-    time.sleep(0.5)
-    zr = page.evaluate(f'{S}.player.pos.z')
-    check('inactive bridge not walkable: falling respawns at spawn', ok and abs(zr - 7.4) < 0.5, f'falls={page.evaluate(S+".__falls")} z={zr:.2f}')
+    def teleport(x, z, yaw=0):
+        ev(f'{S}.player.pos.set({x}, 0, {z}); {S}.player.vel.set(0,0,0); {S}.cameraCtl.yaw = {yaw};')
+        adv(0.2)
 
-    for room in (1, 2, 3):
-        check(f'room {room} loaded', wait_until(page, f'{S}.levels.level.id === {room} && {S}.state === "playing"', 15))
-        time.sleep(0.6)
-        stand_at_relic(page)
-        check(f'room {room}: ignite prompt shown', wait_until(page, 'document.getElementById("prompt").textContent.includes("IGNITE")', 4))
-        page.keyboard.down('KeyE'); time.sleep(0.4); page.keyboard.up('KeyE')
-        check(f'room {room}: relic lit', wait_until(page, f'{P}.relic.lit', 5))
-        check(f'room {room}: reaches ALIGNING', wait_until(page, f'{P}.state === "ALIGNING" && !{P}.jolt', 12))
-        time.sleep(0.4)
-        shot(page, f'1{room}_room{room}_lit')
-        if room > 1:
-            e_before = err_deg(page)
-            # Collar: turning alone must not be able to solve
-            page.keyboard.down('KeyD'); time.sleep(2.0); page.keyboard.up('KeyD')
-            page.keyboard.down('KeyA'); time.sleep(3.0); page.keyboard.up('KeyA')
-            check(f'room {room}: collar prevents solving without rewind', state(page) == 'ALIGNING', f'err {e_before:.0f}°→{err_deg(page):.0f}°')
-            page.keyboard.down('KeyR'); time.sleep(0.5)
-            shot(page, f'1{room}_room{room}_rewinding')
-            page.keyboard.up('KeyR'); time.sleep(0.1)
-            check(f'room {room}: rewind reached oldest memory', rewind_to_oldest(page))
-            echo = page.evaluate(f'{P}.level.relic.startOffsetDeg')
-            check(f'room {room}: rewind restored the echo angle', abs(err_deg(page) - echo) < 1.5, f'err={err_deg(page):.1f}° echo={echo}°')
-        st = turn_until_aligned(page)
-        check(f'room {room}: alignment raises the bridge', st in ('BRIDGE_APPEARING', 'BRIDGE_ACTIVE'), st)
-        check(f'room {room}: bridge collider enabled only when ACTIVE', wait_until(page, f'{P}.bridge.state === "ACTIVE" && {P}.bridge.collider.enabled', 5))
-        time.sleep(0.8)
-        shot(page, f'1{room}_room{room}_bridge')
+    def key_toward(rid):
+        return ev(f'''(() => {{ const p={P}, rs={relic(rid)}, c={S}.cameraCtl, y=rs.relic.yaw, ru=p.runes.get(rs.spec.aim);
+          const s = (-Math.cos(y))*Math.cos(c.yaw) + (Math.sin(y))*(-Math.sin(c.yaw)) >= 0 ? 1 : -1;
+          const d = Math.atan2(Math.sin(y-p.aimYawFor(rs,ru)), Math.cos(y-p.aimYawFor(rs,ru)));
+          return (-Math.sign(d) === s) ? 'KeyD' : 'KeyA'; }})()''')
 
-        if room == 3:
-            # let the span expire without crossing: it must fade and the relic slip
-            check('room 3: timer running', page.evaluate(f'{P}.timerRunning'))
-            # stand on the bridge: timer must pause
-            page.evaluate(f'''(() => {{ const g={S}, br={P}.bridge; const m=br.group.position; g.player.pos.set(m.x, 0, m.z); g.player.vel.set(0,0,0); }})()''')
-            time.sleep(0.6)
-            t_a = page.evaluate(f'{P}.timer'); time.sleep(1.5); t_b = page.evaluate(f'{P}.timer')
-            check('room 3: timer pauses while on the bridge', abs(t_a - t_b) < 0.05, f'{t_a:.2f}→{t_b:.2f}')
-            stand_at_relic(page)
-            check('room 3: span fades after timer', wait_until(page, f'{P}.bridge.state === "HIDDEN" && !{P}.bridge.collider.enabled', 20))
-            check('room 3: relic slipped, back to ALIGNING', wait_until(page, f'{P}.state === "ALIGNING" && !{P}.jolt', 6))
-            rewind_to_oldest(page)
-            st = state(page)
-            if st == 'ALIGNING':
-                st = turn_until_aligned(page)
-            check('room 3: re-align after slip via rewind', wait_until(page, f'{P}.bridge.state === "ACTIVE"', 6), st)
+    def turn_to_lock(rid, timeout=20):
+        """Hold the key that reduces the error until the relic locks onto its rune."""
+        steps = 0
+        while steps < timeout * 30:
+            if ev(f'!!{relic(rid)}.lockedOn'): return True
+            k = key_toward(rid)
+            down(k)
+            for _ in range(90):
+                adv(1/30); steps += 1
+                if ev(f'!!{relic(rid)}.lockedOn || {relic(rid)}.atLimit'): break
+            up(k); adv(0.1)
+            if ev(f'{relic(rid)}.atLimit && !{relic(rid)}.lockedOn'): return False
+        return ev(f'!!{relic(rid)}.lockedOn')
 
-        check(f'room {room}: bridge walkable end to end (no fall)', walk_bridge(page))
-        shot(page, f'1{room}_room{room}_crossed')
-        grab_ember(page)
-        if room < 3:
-            check(f'room {room}: ember awarded once', wait_until(page, f'{S}.levels.emberCount === {room}', 5))
-            time.sleep(0.2)
-            check(f'room {room}: no double award', page.evaluate(f'{S}.levels.emberCount') == room)
+    def ignite(rid):
+        press('KeyE')
+        adv(0.2)
+        return ev(f'{relic(rid)}.lit')
 
-    check('finale triggered', wait_until(page, f'{S}.state === "finale"', 6))
-    time.sleep(3.0); shot(page, '30_finale_heart')
-    check('victory reached', wait_until(page, f'{S}.state === "victory"', 20))
-    check('ember count 3/3', page.evaluate(f'{S}.levels.emberCount') == 3)
-    time.sleep(0.8); shot(page, '31_victory')
+    def wait_jolt(rid, t=8):
+        for _ in range(int(t * 10)):
+            if not ev(f'!!{relic(rid)}.jolt'): return True
+            adv(0.1)
+        return False
 
-    # Play again resets the run
-    page.dispatch_event('#screen-victory button[data-action=play-again]', 'click')
-    check('play again resets to room 1 with 0 embers', wait_until(page, f'{S}.state === "playing" && {S}.levels.level.id === 1 && {S}.levels.emberCount === 0', 15))
-    # pause freezes, restart room works
-    time.sleep(1)
-    page.keyboard.press('Escape')
-    check('Esc pauses', wait_until(page, f'{S}.state === "paused"', 5))
-    tp = page.evaluate(f'{S}.time'); time.sleep(1.5)
-    check('pause freezes simulation', abs(page.evaluate(f'{S}.time') - tp) < 0.001)
-    page.dispatch_event('#screen-pause button[data-action=resume]', 'click')
-    check('resume returns to play', wait_until(page, f'{S}.state === "playing"', 5))
-    stand_at_relic(page); page.keyboard.press('KeyE')
-    wait_until(page, f'{P}.relic.lit', 5); time.sleep(0.5)
-    page.keyboard.press('Backspace')
-    check('restart room resets relic', wait_until(page, f'{S}.state === "playing" && !{P}.relic.lit', 6))
-    time.sleep(1)
-    page.keyboard.press('Escape'); wait_until(page, f'{S}.state === "paused"', 5)
-    page.dispatch_event('#screen-pause button[data-action=main-menu]', 'click')
-    check('main menu returns to title', wait_until(page, f'{S}.state === "title"', 5))
+    def rewind_until(rid, cond_js, max_sec=12):
+        down('KeyR')
+        ok = False
+        for _ in range(int(max_sec * 30)):
+            adv(1/30)
+            if ev(cond_js): ok = True; break
+        up('KeyR'); adv(0.1)
+        return ok
 
-    fps = page.evaluate('''new Promise(r => { let n=0; const t0=performance.now(); function f(){ n++; if (performance.now()-t0 < 2000) requestAnimationFrame(f); else r(n/2); } requestAnimationFrame(f); })''')
-    print(f'headless software-GL fps on title: {fps:.1f} (not representative of a real GPU)')
+    def walk_bridge(rune_id, extra=1.2):
+        """Walk the full length of a bridge with W (+ a little beyond)."""
+        f0 = ev('window.__falls')
+        ev(f'''(() => {{ const g={S}, br={P}.runes.get("{rune_id}").bridge;
+          const dx=br.end.x-br.start.x, dz=br.end.z-br.start.z, L=Math.hypot(dx,dz);
+          g.player.pos.set(br.start.x - dx/L*1.2, br.start.y, br.start.z - dz/L*1.2); g.player.vel.set(0,0,0);
+          g.cameraCtl.yaw = Math.atan2(-dx, -dz); g.cameraCtl.pitch = 0.3; }})()''')
+        adv(0.2)
+        L = ev(f'{P}.runes.get("{rune_id}").bridge.length')
+        down('KeyW')
+        adv((L + 2.4 + extra) / 3.7)
+        up('KeyW'); adv(0.3)
+        far = ev(f'''(() => {{ const g={S}, br={P}.runes.get("{rune_id}").bridge;
+          const fx=br.end.x-br.start.x, fz=br.end.z-br.start.z;
+          return ((g.player.pos.x-br.start.x)*fx + (g.player.pos.z-br.start.z)*fz)/(br.length*br.length); }})()''')
+        return ev('window.__falls') == f0 and far > 1.0, far
+
+    def walk_to(x, z, max_sec=20, sprint=False):
+        """Walk (W) toward a point, re-aiming the camera each step. Returns final distance."""
+        down('KeyW')
+        if sprint: down('ShiftLeft')
+        for _ in range(int(max_sec * 10)):
+            d = ev(f'''(() => {{ const g={S}; const dx={x}-g.player.pos.x, dz={z}-g.player.pos.z;
+               g.cameraCtl.yaw = Math.atan2(-dx, -dz); return Math.hypot(dx, dz); }})()''')
+            if d < 0.7: break
+            adv(0.1)
+        up('KeyW')
+        if sprint: up('ShiftLeft')
+        adv(0.2)
+        d = ev(f'Math.hypot({x}-{S}.player.pos.x, {z}-{S}.player.pos.z)')
+        if d > 0.9: print(f'   walk_to({x},{z}) stopped at', ev(f'[{S}.player.pos.x.toFixed(2),{S}.player.pos.z.toFixed(2),{S}.state, window.__falls]'), flush=True)
+        return d
+
+    def grab_ember():
+        e = ev(f'(() => {{ const e={P}.ember.base; return [e.x, e.z]; }})()')
+        d = walk_to(e[0], e[1] + 0.01, 12)
+        adv(0.3)
+        return d
+
+    def level_done(i): return ev(f'{S}.world.progress.data.completed.includes({i})')
+
+    def skip_scene():
+        for _ in range(3):
+            if ev(f'{S}.state') == 'cutscene': press('Escape'); adv(0.5)
+        adv(0.8)
+
+    # ===================================================================== title + opening
+    check('title screen', ev(f'{S}.state') == 'title')
+    ev(f"localStorage.clear(); {S}.world.progress.reset(); {S}.onAction('new-game')")
+    time.sleep(0.8); adv(0.5)
+    check('new game plays the opening cutscene', ev(f'{S}.state') == 'cutscene' and ev(f'{S}.story.scene.id') == 'opening')
+    adv(6.5); i0 = ev(f'{S}.story.scene.i'); press('Space'); adv(0.3); press('Space'); adv(0.5)
+    check('Space advances dialogue', ev(f'{S}.story.scene.i') > i0, f'{i0} → {ev(f"{S}.story.scene.i")}')
+    press('Escape'); adv(1.0)
+    check('Esc skips the cutscene and returns control', ev(f'{S}.state') == 'playing' and not ev(f'!!{S}.cameraCtl.override'))
+    shot('00_start')
+
+    # ===================================================================== camera + controls
+    ev(f'{S}.cameraCtl.yaw = 0; {S}.player.pos.set(0,0,72); {S}.player.vel.set(0,0,0)'); adv(0.3)
+    for key, want in (('KeyW', (0, -1)), ('KeyS', (0, 1)), ('KeyA', (-1, 0)), ('KeyD', (1, 0))):
+        for yaw in (0, math.pi / 2, math.pi, -math.pi / 2):
+            ev(f'{S}.cameraCtl.yaw = {yaw}; {S}.player.pos.set(0,0,70); {S}.player.vel.set(0,0,0)'); adv(0.1)
+            down(key); adv(0.6); up(key); adv(0.3)
+            dx, dz = ev(f'[{S}.player.pos.x - 0, {S}.player.pos.z - 70]')
+            # expected world direction for this camera yaw
+            fx, fz = -math.sin(yaw), -math.cos(yaw)
+            rx, rz = math.cos(yaw), -math.sin(yaw)
+            ex = fx * (-want[1]) + rx * want[0]
+            ez = fz * (-want[1]) + rz * want[0]
+            dot = (dx * ex + dz * ez) / max(1e-6, math.hypot(dx, dz))
+            check(f'{key} moves correctly at camera yaw {round(math.degrees(yaw))}°', dot > 0.95, f'dot={dot:.2f}')
+    # diagonal is not faster
+    ev(f'{S}.cameraCtl.yaw = 0; {S}.player.pos.set(0,0,72); {S}.player.vel.set(0,0,0)'); adv(0.1)
+    down('KeyW'); adv(1.0); s1 = ev(f'{S}.player.horizontalSpeed'); down('KeyD'); adv(1.0); s2 = ev(f'{S}.player.horizontalSpeed'); up('KeyW'); up('KeyD'); adv(0.5)
+    check('diagonal speed equals straight speed', abs(s1 - s2) < 0.05, f'{s1:.2f} vs {s2:.2f}')
+    # camera follows the Keeper
+    ev(f'{S}.cameraCtl.yaw = 0; {S}.player.pos.set(0,0,74); {S}.player.vel.set(0,0,0)'); adv(0.3)
+    down('KeyW'); adv(3.0); up('KeyW'); adv(0.5)
+    cd = ev(f'{S}.camera.position.distanceTo({S}.player.pos)')
+    check('camera follows the Keeper (distance stays 2–6)', 2.0 < cd < 6.5, f'{cd:.2f}')
+    # camera does not pass through walls: back the Keeper against the L1 west wall, look across it
+    ev(f'{S}.player.pos.set(-8.4, 0, 52); {S}.player.vel.set(0,0,0); {S}.cameraCtl.yaw = -Math.PI/2; {S}.cameraCtl.pitch = 0.2'); adv(0.5)
+    camx = ev(f'{S}.camera.position.x')
+    check('camera pulls in front of a wall', camx > -9.0, f'cam x={camx:.2f}')
+    # stuck keys cleared on focus loss
+    down('KeyW'); adv(0.1); ev('window.dispatchEvent(new Event("blur"))'); adv(0.1)
+    check('focus loss pauses and releases held keys', ev(f'{S}.state') == 'paused' and not ev(f'{S}.input.down.has("KeyW")'))
+    up('KeyW'); ev(f"{S}.onAction('resume')"); adv(0.2)
+    check('resume after focus loss', ev(f'{S}.state') == 'playing')
+    # locked gate is solid
+    ev(f'{S}.player.pos.set(0, 0, 35); {S}.player.vel.set(0,0,0); {S}.cameraCtl.yaw = 0'); adv(0.2)
+    down('KeyW'); adv(1.5); up('KeyW'); adv(0.2)
+    check('a sealed gate blocks the way', ev(f'{S}.player.pos.z') > 33.3, f"z={ev(f'{S}.player.pos.z'):.2f}")
+
+    # ===================================================================== L1
+    teleport(0, 58, 0)
+    check('L1 entered (active puzzle)', ev(f'{P} && {P}.level.id') == 1)
+    stand_behind('A')
+    check('L1 ignite', ignite('A'))
+    check('L1 turn → rune', turn_to_lock('A'))
+    adv(1.0)
+    shot('11_L1_bridge')
+    ok, far = walk_bridge('a'); check('L1 bridge walked', ok, f'{far:.2f}')
+    grab_ember(); adv(1.0)
+    check('L1 complete; gates open', level_done(1) and ev(f'{S}.world.gates.get("g_L1").isOpen'))
+    adv(3)
+    # walk through the opened gate and gallery into the hub
+    walk_to(0, 35.5, 10); walk_to(0, 21.5, 10)
+    adv(1.0)
+    check('entering the hub plays its scene', ev(f'{S}.state') == 'cutscene')
+    skip_scene()
+    d = walk_to(0, 17, 6)
+    check('walk through the L1 gate and gallery into the hub', d < 1.0, f'dist {d:.2f}')
+    check('hub arrival scene seen', ev(f'{S}.world.progress.data.story.includes("hub_first")'))
+
+    # ===================================================================== L2
+    for (x, z) in ((-10, 15), (-17, 14), (-17, 0), (-30, 0)): walk_to(x, z, 12, sprint=True)
+    d = walk_to(-36, 0, 6)
+    check('walk through the hub west gate to L2', d < 1.0 and ev(f'{P} && {P}.level.id') == 2, f'{d:.2f}')
+    stand_behind('A'); ignite('A'); wait_jolt('A')
+    adv(0.3)
+    for k, t in (('KeyD', 2), ('KeyA', 3)):
+        down(k); adv(t); up(k); adv(0.1)
+    check('L2 collar alone cannot solve', not ev(f'!!{relic("A")}.lockedOn'), f'err {err_deg("A"):.0f}°')
+    rewind_until('A', f'{relic("A")}.relic.history.atOldest')
+    check('L2 rewind returns to the echo angle', abs(err_deg('A') - (-16)) < 2.0, f'err {err_deg("A"):.1f}°')
+    check('L2 nudge → rune', turn_to_lock('A'))
+    adv(1.0); ok, far = walk_bridge('a'); check('L2 bridge walked', ok, f'{far:.2f}')
+    grab_ember(); adv(1.5); check('L2 complete', level_done(2))
+
+    # ===================================================================== L3
+    walk_to(-55, -10, 6); walk_to(-55, -16, 6); d = walk_to(-55, -27.5, 8)
+    check('walk through the L2 gate to L3', ev(f'{P} && {P}.level.id') == 3, f'{d:.2f}')
+    stand_behind('A'); ignite('A'); check('L3 A → half span', turn_to_lock('A'))
+    adv(1.0); ok, far = walk_bridge('a', 0.4); check('L3 first half walked onto island', ok, f'{far:.2f}')
+    stand_behind('B'); ignite('B'); check('L3 B → second half', turn_to_lock('B'))
+    adv(1.0); ok, far = walk_bridge('b'); check('L3 second half walked', ok, f'{far:.2f}')
+    grab_ember(); adv(1.5); check('L3 complete', level_done(3))
+
+    # ===================================================================== L4
+    walk_to(-55, -56, 6); walk_to(-55, -62, 6); d = walk_to(-55, -68.5, 6)
+    check('walk through the L3 gate to L4', ev(f'{P} && {P}.level.id') == 4, f'{d:.2f}')
+    stand_behind('A'); ignite('A')
+    # wrong slot first: turning cannot reach the rune (length mismatch)
+    turn_ok = turn_to_lock('A', timeout=6)
+    check('L4 wrong slot cannot solve (shadow too short)', not turn_ok)
+    lever = ev(f'{relic("A")}.spec.rail.lever')
+    teleport(lever[0], lever[1] + 1.2, 0)
+    press('KeyE'); adv(1.2); press('KeyE'); adv(1.2)
+    check('L4 lever slides relic to slot 3', ev(f'{relic("A")}.slot') == 2)
+    stand_behind('A'); check('L4 turn → rune from the right socket', turn_to_lock('A'))
+    adv(1.0); ok, far = walk_bridge('a'); check('L4 bridge walked', ok, f'{far:.2f}')
+    grab_ember(); adv(1.5)
+    check('L4 complete; shortcut + north gate open', level_done(4) and ev(f'{S}.world.gates.get("g_sc_w").isOpen || {S}.world.gates.get("g_sc_w").state==="opening"'))
+    skip_scene()
+    check('revelation I seen', ev(f'{S}.world.progress.data.story.includes("rev1")'))
+    adv(3)
+    # use the shortcut back to the hub
+    for (x, z) in ((-40, -90), (-31, -90), (-31, -16), (-20, -16)):
+        d = walk_to(x, z, 30, sprint=True)
+    check('shortcut corridor leads back into the hub', ev(f'{S}.player.pos.x') > -22 and ev(f'{S}.player.pos.z') < -10, f'{ev(f"[{S}.player.pos.x,{S}.player.pos.z]")}')
+
+    # ===================================================================== L5
+    for (x, z) in ((-16, -16), (0, -16), (0, -25)): walk_to(x, z, 12, sprint=True)
+    d = walk_to(0, -34, 8)
+    check('walk through the north gate to L5', ev(f'{P} && {P}.level.id') == 5, f'{d:.2f}')
+    stand_behind('A'); ignite('A'); wait_jolt('A')
+    # hold R through the whole memory: passing the answer must NOT solve it, but the rune must blink
+    ev(f'window.__blinks = 0; (() => {{ const v={P}.runes.get("a").view; const o=v.sweep.bind(v); v.sweep = () => {{ window.__blinks++; o(); }}; }})()')
+    rewind_until('A', f'{relic("A")}.relic.history.atOldest')
+    check('L5 rewinding through the answer does not auto-solve', not ev(f'!!{relic("A")}.lockedOn'))
+    check('L5 the rune blinks when the past shadow sweeps over it', ev('window.__blinks') >= 1, f"blinks={ev('window.__blinks')}")
+    # replay forward is impossible; re-ignite is not needed: rewind from the oldest is done — use restart to test recovery
+    press('Backspace'); time.sleep(0.4); adv(0.6)
+    check('L5 Backspace restarts the puzzle (relic cold again)', not ev(f'{relic("A")}.lit'))
+    stand_behind('A'); ignite('A'); wait_jolt('A')
+    ok = rewind_until('A', f'Math.abs((() => {{ const p={P}, rs={relic("A")}, ru=p.runes.get("a"); const a=p.aimYawFor(rs,ru); return Math.atan2(Math.sin(rs.relic.yaw-a), Math.cos(rs.relic.yaw-a)); }})()) < 0.17')
+    check('L5 rewind stopped near the answer', ok, f'err {err_deg("A"):.1f}°')
+    check('L5 nudge → rune', turn_to_lock('A'))
+    adv(1.0); ok, far = walk_bridge('a'); check('L5 bridge walked', ok, f'{far:.2f}')
+    grab_ember(); adv(1.5); check('L5 complete', level_done(5))
+
+    # ===================================================================== L6
+    walk_to(0, -56, 6); walk_to(0, -60.5, 6); d = walk_to(-1, -64, 6)
+    check('walk through the L5 gate to L6', ev(f'{P} && {P}.level.id') == 6, f'{d:.2f}')
+    stand_behind('B')  # cannot ignite B directly
+    press('KeyE'); adv(0.3)
+    check('L6 B cannot be lit by hand', not ev(f'{relic("B")}.lit'))
+    stand_behind('A'); ignite('A'); check('L6 A → relay rune', turn_to_lock('A'))
+    adv(2.5)
+    check('L6 fire relays to B and the inner gate opens', ev(f'{relic("B")}.lit') and ev(f'{S}.world.gates.get("g_L6m").state !== "closed"'))
+    adv(2.5)
+    d = walk_to(-1, -69, 6); d = walk_to(5, -69, 6)
+    check('walk through the inner gate', ev(f'{S}.player.pos.x') > 3, f'{d:.2f}')
+    wait_jolt('B'); stand_behind('B')
+    rewind_until('B', f'{relic("B")}.relic.history.atOldest')
+    check('L6 nudge B → rune', turn_to_lock('B'))
+    adv(1.0); ok, far = walk_bridge('b'); check('L6 bridge walked', ok, f'{far:.2f}')
+    grab_ember(); adv(1.5); check('L6 complete', level_done(6))
+
+    # ===================================================================== L7
+    walk_to(16, -88, 6); walk_to(21, -88, 6); d = walk_to(27, -88, 6)
+    check('walk through the L6 gate to L7', ev(f'{P} && {P}.level.id') == 7, f'{d:.2f}')
+    stand_behind('W'); press('KeyE'); adv(0.3)
+    check('L7 cold relic refuses without flame', not ev(f'{relic("W")}.lit'))
+    walk_to(34.5, -79, 6); press('KeyE'); adv(0.2)
+    check('L7 take flame from the hearth', ev(f'!!{S}.player.flame'))
+    # wrong choice first: spend it on the wave decoy, see the rejection
+    walk_to(28.5, -71.6, 6, sprint=True); press('KeyE'); adv(0.3)
+    check('L7 decoy kindled (flame spent)', ev(f'{relic("W")}.lit') and not ev(f'!!{S}.player.flame'))
+    stand_behind('W')
+    k = key_toward('W'); down(k)
+    rej = False
+    for _ in range(240):
+        adv(1/30)
+        if ev(f'{P}.flash && {P}.flash.text.includes("DOES NOT KNOW")'): rej = True; break
+    up(k)
+    check('L7 decoy shadow on the door rune is rejected', rej and not ev(f'{P}.runes.get("c").lit'))
+    walk_to(34.5, -79, 8); press('KeyE'); adv(0.2)
+    for (x, z) in ((35, -87), (44.5, -91.5)):
+        walk_to(x, z, 10, sprint=True)
+    press('KeyE'); adv(0.3)
+    check('L7 eye relic kindled before the flame died', ev(f'{relic("C")}.lit'))
+    stand_behind('C'); check('L7 eye relic → door rune', turn_to_lock('C'))
+    adv(3.0)
+    check('L7 door opened', ev(f'{S}.world.gates.get("g_L7").isOpen'))
+    walk_to(37, -87.5, 8); walk_to(33, -82, 8); walk_to(33, -64, 8); d = walk_to(33, -57.6, 6); adv(1.5)
+    check('L7 complete (ember beyond the door)', level_done(7))
+    skip_scene(); check('revelation II seen', ev(f'{S}.world.progress.data.story.includes("rev2")'))
+    adv(3)
+    for (x, z) in ((33, -31), (16, -31), (16, -18)):
+        walk_to(x, z, 30, sprint=True)
+    check('north shortcut back into the hub', ev(f'{S}.player.pos.z') > -22, f'{ev(f"[{S}.player.pos.x,{S}.player.pos.z]")}')
+
+    # ===================================================================== L8
+    for (x, z) in ((16, -16), (16, 0), (26, 0)): walk_to(x, z, 12, sprint=True)
+    d = walk_to(33.5, 0, 8)
+    check('walk through the east gate to L8', ev(f'{P} && {P}.level.id') == 8, f'{d:.2f}')
+    lever = ev(f'{relic("A")}.spec.rail.lever')
+    teleport(lever[0] - 1.2, lever[1], 0); press('KeyE'); adv(1.2)
+    check('L8 lever → slot 2', ev(f'{relic("A")}.slot') == 1)
+    stand_behind('A'); ignite('A'); check('L8 rail relic opens the inner door', turn_to_lock('A'))
+    adv(3)
+    hz = ev(f'(() => {{ const b={P}.braziers.find(b=>b.eternal); return [b.pos.x, b.pos.z]; }})()')
+    walk_to(hz[0], hz[1] + 1.5, 8); press('KeyE'); adv(0.2)
+    check('L8 flame taken', ev(f'!!{S}.player.flame'))
+    for (x, z) in ((38.5, 4), (42, 4), (44.3, -6.4)):
+        walk_to(x, z, 8, sprint=True)
+    press('KeyE'); adv(0.3)
+    check('L8 cold collar relic kindled in time', ev(f'{relic("B")}.lit'))
+    wait_jolt('B'); stand_behind('B')
+    rewind_until('B', f'{relic("B")}.relic.history.atOldest')
+    check('L8 nudge → timed span', turn_to_lock('B'))
+    adv(1.0)
+    check('L8 span timer running', ev(f'!!{P}.hudTimer'))
+    ok, far = walk_bridge('b'); check('L8 timed span crossed', ok, f'{far:.2f}')
+    grab_ember(); adv(1.5); check('L8 complete', level_done(8))
+
+    # ===================================================================== L9
+    walk_to(57, 13, 8); walk_to(57, 18, 6); d = walk_to(57, 28.5, 10)
+    check('walk through the L8 gate to L9', ev(f'{P} && {P}.level.id') == 9, f'{d:.2f}')
+    stand_behind('A'); ignite('A'); check('L9 A → relay', turn_to_lock('A'))
+    adv(2.5); check('L9 B lit by relay', ev(f'{relic("B")}.lit'))
+    wait_jolt('B'); stand_behind('B')
+    rewind_until('B', f'{relic("B")}.relic.history.atOldest')
+    check('L9 B → bridge + relay', turn_to_lock('B'))
+    adv(2.5); check('L9 C lit by relay', ev(f'{relic("C")}.lit'))
+    ok, far = walk_bridge('c', 0.3); check('L9 first span walked to the island', ok, f'{far:.2f}')
+    lever = ev(f'{relic("C")}.spec.rail.lever')
+    teleport(lever[0], lever[1] + 1.2, 0); press('KeyE'); adv(1.2); press('KeyE'); adv(1.2)
+    check('L9 C slid to slot 3', ev(f'{relic("C")}.slot') == 2)
+    stand_behind('C'); check('L9 C → timed final span', turn_to_lock('C'))
+    adv(1.0); ok, far = walk_bridge('x'); check('L9 timed span crossed', ok, f'{far:.2f}')
+    grab_ember(); adv(1.5); check('L9 complete', level_done(9))
+    skip_scene(); check('ring wakes', ev(f'[...{S}.world.l10.relics.values()].every(r => r.awake)'))
+    adv(3)
+    for (x, z) in ((28, 29), (28, 13), (18, 13)):
+        walk_to(x, z, 30, sprint=True)
+    check('east shortcut back into the hub', ev(f'{S}.player.pos.x') < 22, f'{ev(f"[{S}.player.pos.x,{S}.player.pos.z]")}')
+
+    # ===================================================================== L10
+    adv(0.5); check('L10 active in the hub', ev(f'{P} && {P}.level.id') == 10)
+    # E relic: flame from the ring hearth
+    walk_to(17, 5, 10, sprint=True); walk_to(16.5, -13.6, 12, sprint=True); press('KeyE'); adv(0.2)
+    check('L10 ring hearth gives flame', ev(f'!!{S}.player.flame'))
+    walk_to(16.0, 7.2, 12, sprint=True); press('KeyE'); adv(0.3)
+    check('L10 E kindled', ev(f'{relic("E")}.lit'))
+    stand_behind('E'); check('L10 E socket held', turn_to_lock('E'))
+    # S relic: rail
+    lever = ev(f'{relic("S")}.spec.rail.lever')
+    teleport(lever[0] + 1.2, lever[1], 0); press('KeyE'); adv(1.2)
+    check('L10 S slid to the middle socket', ev(f'{relic("S")}.slot') == 1)
+    stand_behind('S'); ignite('S'); check('L10 S socket held', turn_to_lock('S'))
+    # W relic: collar + rewind
+    teleport(-17, -7, 0); stand_behind('W'); ignite('W'); wait_jolt('W'); stand_behind('W')
+    rewind_until('W', f'{relic("W")}.relic.history.atOldest')
+    check('L10 W socket held', turn_to_lock('W'))
+    adv(1.0)
+    check('L10 all three held at once → final span', ev(f'{S}.world.l10.level.allSocketsDone') and ev(f'{S}.world.finalBridge.collider.enabled || {S}.world.finalBridge.state==="APPEARING"'))
+    adv(1.5)
+    shot('30_L10_final_span')
+    teleport(0, -15, math.pi)
+    down('KeyW'); adv(4.0); up('KeyW'); adv(0.5)
+    check('final span walked to the Heart', ev(f'{S}.state') == 'cutscene' or level_done(10), f"pos {ev(f'[{S}.player.pos.x,{S}.player.pos.z]')}")
+    for _ in range(40):
+        if ev(f'{S}.state') != 'cutscene': break
+        press('Space'); adv(1.0)
+    check('finale reaches victory', ev(f'{S}.state') == 'victory', ev(f'{S}.state'))
+    check('ten embers', ev(f'{S}.world.progress.data.completed.length') >= 10)
+    shot('31_victory')
+
+    # ===================================================================== persistence + menus
+    ev(f"{S}.onAction('main-menu')"); time.sleep(0.6); adv(0.3)
+    check('main menu returns to title', ev(f'{S}.state') == 'title')
+    check('continue offered from save', ev(f'!document.getElementById("btn-continue").classList.contains("hidden")'))
+    check('no console errors', not errors, '; '.join(errors[:4]))
     browser.close()
 
-real_errors = [e for e in errors if 'pointer' not in e.lower() and 'AudioContext' not in e]
-check('no console errors', not real_errors, '; '.join(real_errors[:5]))
 fails = [r for r in results if not r[1]]
 print(f'\n{len(results) - len(fails)}/{len(results)} checks passed')
 sys.exit(1 if fails else 0)

@@ -2,23 +2,30 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { COLORS, stoneMaterial } from '../game/Palette.js';
 import { TimeRecorder } from '../game/TimeRecorder.js';
+import { LightSource } from '../game/LightPool.js';
+import { emblemTexture } from './Glyphs.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { mergeGroup } from './Environment.js';
+
+let TICKS = null, TICK_MAT = null;
 
 // OBJ_Relic_Core + OBJ_Relic_Pedestal.
 // The relic is a floating sundial: a stone ring, an upright gnomon blade (whose "shadow" is the
 // puzzle guide) and an ember core that ignites. Rotation is about the pedestal's vertical axis.
 // Yaw convention = Three.js rotation.y; forward (gnomon direction) = (-sin yaw, 0, -cos yaw).
 export class Relic {
-  constructor({ position, pedestalHeight = 0.95, startYaw = 0 }) {
+  constructor({ position, pedestalHeight = 0.95, startYaw = 0, emblem = null, memorySeconds = 4 }) {
     this.group = new THREE.Group();
     this.group.name = 'Relic';
-    this.base = new THREE.Vector3(position.x, 0, position.z);
+    this.base = new THREE.Vector3(position.x, position.y || 0, position.z);
     this.pedestalHeight = pedestalHeight;
     this.group.position.copy(this.base);
+    this.base = this.group.position;
     this.yaw = startYaw;
     this.startYaw = startYaw;
     this.lit = false;
     this.litAmount = 0;
-    this.history = new TimeRecorder(20, 4);
+    this.history = new TimeRecorder(20, memorySeconds);
     this.time = 0;
 
     // --- pedestal ---
@@ -34,18 +41,35 @@ export class Relic {
     band.rotation.x = Math.PI / 2;
     band.position.y = pedestalHeight * 0.55;
     ped.add(foot, shaft, top, band);
-    ped.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-    this.group.add(ped);
+    const pedMerged = mergeGroup(ped, stone);
+    this.group.add(pedMerged);
+    if (emblem) {
+      // the relic's sign, carved on four faces of the shaft (matches gate keystones)
+      const em = new THREE.MeshBasicMaterial({ map: emblemTexture(emblem), transparent: true, depthWrite: false, color: new THREE.Color(COLORS.target).multiplyScalar(1.1), toneMapped: false });
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2;
+        const pl = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.42), em);
+        pl.position.set(Math.sin(a) * 0.43, pedestalHeight * 0.56, Math.cos(a) * 0.43);
+        pl.rotation.y = a;
+        this.group.add(pl);
+      }
+    }
 
     // dial tick marks on the pedestal top (time/sundial motif)
-    const tickMat = new THREE.MeshBasicMaterial({ color: 0x8a7a5a });
-    for (let i = 0; i < 12; i++) {
-      const t = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.012, i % 3 ? 0.08 : 0.14), tickMat);
-      const a = (i / 12) * Math.PI * 2;
-      t.position.set(Math.sin(a) * 0.53, pedestalHeight + 0.006, Math.cos(a) * 0.53);
-      t.rotation.y = a;
-      this.group.add(t);
+    if (!TICKS) {
+      const parts = [];
+      for (let i = 0; i < 12; i++) {
+        const g = new THREE.BoxGeometry(0.04, 0.012, i % 3 ? 0.08 : 0.14);
+        const a = (i / 12) * Math.PI * 2;
+        g.applyMatrix4(new THREE.Matrix4().makeRotationY(a).setPosition(Math.sin(a) * 0.53, 0.006, Math.cos(a) * 0.53));
+        parts.push(g);
+      }
+      TICKS = mergeGeometries(parts);
+      TICK_MAT = new THREE.MeshBasicMaterial({ color: 0x8a7a5a });
     }
+    const ticks = new THREE.Mesh(TICKS, TICK_MAT);
+    ticks.position.y = pedestalHeight;
+    this.group.add(ticks);
 
     // --- collar arc: shows the range the relic can be nudged by hand (Rooms 2–3) ---
     this.collarMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(COLORS.fire).multiplyScalar(1.2), transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, toneMapped: false });
@@ -63,7 +87,7 @@ export class Relic {
     this.visual = this._buildRelicVisual();
     this.pivot.add(this.visual);
 
-    this.light = new THREE.PointLight(COLORS.fire, 0, 11, 1.4);
+    this.light = new LightSource(COLORS.fire, 0, 11, 1.4);
     this.light.position.set(0, pedestalHeight + 0.6, 0);
     this.group.add(this.light);
 
@@ -126,7 +150,7 @@ export class Relic {
   }
 
   get position() { return this.group.position; }
-  get flamePoint() { return new THREE.Vector3(this.base.x, this.pivot.position.y + 0.2, this.base.z); }
+  get flamePoint() { return (this._fp || (this._fp = new THREE.Vector3())).set(this.group.position.x, this.group.position.y + this.pivot.position.y + 0.2, this.group.position.z); }
 
   forward(yaw = this.yaw) { return new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)); }
 
@@ -174,5 +198,6 @@ export class Relic {
     this.pivot.position.y = this.pedestalHeight + 0.42 + Math.sin(this.time * 1.7) * 0.03 * this.litAmount;
     const co = this.collarVisible ? 0.55 : 0;
     this.collarMat.opacity += (co - this.collarMat.opacity) * Math.min(1, dt * 6);
+    this.collar.visible = this.collarMat.opacity > 0.004;
   }
 }

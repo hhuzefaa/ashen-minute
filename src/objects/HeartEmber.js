@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { COLORS, stoneMaterial } from '../game/Palette.js';
 import { runeTexture } from './Glyphs.js';
+import { LightSource } from '../game/LightPool.js';
 
 // OBJ_Heart_Ember: stepped altar of the same civilisation as the relic pedestal, with a separate
 // suspended core that can glow independently, three empty ember sockets and a floor seal
@@ -67,7 +68,7 @@ export class HeartEmber {
     seal.renderOrder = 3;
     this.group.add(seal);
 
-    this.light = new THREE.PointLight(COLORS.fire, 1.2, 14, 1.4);
+    this.light = new LightSource(COLORS.fire, 1.2, 14, 1.4);
     this.light.position.y = y + 1.1;
     this.group.add(this.light);
   }

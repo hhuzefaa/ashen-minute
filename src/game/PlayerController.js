@@ -25,6 +25,7 @@ export class PlayerController {
     this.lastStepSign = 0;
     this.onFootstep = null;
     this.onFall = null;
+    this.flame = null; // carried flame { t, max }
   }
 
   setSpawn(p, yaw) {
@@ -59,7 +60,8 @@ export class PlayerController {
     const len = Math.hypot(wx, wz);
     if (len > 1) { wx /= len; wz /= len; } // diagonal is never faster
 
-    const tx = wx * SPEED, tz = wz * SPEED;
+    const spd = SPEED * (opts.sprint ? 1.7 : 1);
+    const tx = wx * spd, tz = wz * spd;
     const k = 1 - Math.exp(-(len > 0.01 ? ACCEL : DECEL) * dt);
     const airK = this.grounded ? 1 : 0.35;
     this.vel.x += (tx - this.vel.x) * k * airK;
