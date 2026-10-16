@@ -36,12 +36,13 @@ export class ShadowView {
   }
 
   /** start: distance from the stone where the shadow begins; len: where it ends. */
-  set(base, yaw, start, len, strength, rimColor, rimBoost) {
+  set(base, yaw, start, len, strength, rimColor, rimBoost, widthScale = 1) {
     const g = this.group;
     g.visible = strength > 0.004;
     if (!g.visible) return;
     g.position.set(base.x, base.y + 0.04, base.z);
     g.rotation.y = yaw;
+    g.scale.x = widthScale;
     const L = Math.max(0.05, len - start);
     const mid = -(start + L / 2);
     this.body.scale.set(W, 1, L); this.body.position.z = mid;

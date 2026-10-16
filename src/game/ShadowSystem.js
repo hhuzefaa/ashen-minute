@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { COLORS, angleDiff } from './Palette.js';
 import { ShadowView } from '../objects/ShadowView.js';
+import { FEATURES } from './Features.js';
 
 // "You are the light." Every fire casts every nearby stone's shadow directly away from itself
 // (rule 1); a shadow over the abyss is solid ground while it lasts (rule 2).
@@ -77,6 +78,9 @@ export class ShadowSystem {
     this.ilenActive = false;
     this.playerOnShadow = null;
     this.extraLights = [];       // { id, kind, pos } registered by echoes and Marrow
+    this.ilenReach = SHADOW.REACH; // ASH_DARK: the lantern reaches only 5 m inside an ash zone
+    // GNOMON_ILEN: under any other fire, Ilen's own body is a gnomon (no collider, body runes only)
+    this.body = FEATURES.GNOMON_ILEN ? { id: 'ilen-body', body: true, base: game.player.pos, shadows: new Map(), level: 0 } : null;
     // Focus (hold Q): faint previews of where each unlit sconce would cast if kindled
     this.focus = false;
     this.previews = [];
@@ -105,7 +109,8 @@ export class ShadowSystem {
   // ------------------------------------------------------------------ lights + stones
   _light(i) {
     let l = this._lightPool[i];
-    if (!l) { l = { id: '', kind: '', pos: new THREE.Vector3() }; this._lightPool[i] = l; }
+    if (!l) { l = { id: '', kind: '', pos: new THREE.Vector3(), reach: SHADOW.REACH }; this._lightPool[i] = l; }
+    l.reach = SHADOW.REACH;
     return l;
   }
 
@@ -116,6 +121,7 @@ export class ShadowSystem {
     if (this.ilenActive) {
       const l = this._light(n++);
       l.id = 'ilen'; l.kind = 'ilen';
+      l.reach = this.ilenReach;
       this.game.player.keeper.lanternCore.getWorldPosition(l.pos);
       L.push(l);
     }
@@ -132,6 +138,7 @@ export class ShadowSystem {
         L.push(l);
       }
     }
+    if (this.body) S.push(this.body);
   }
 
   // ------------------------------------------------------------------ geometry
@@ -140,10 +147,10 @@ export class ShadowSystem {
    * Returns false when there is no shadow. Static so the light map and tests use exactly the
    * same rule as the game.
    */
-  static compute(collision, base, lx, lz, out, a, b) {
+  static compute(collision, base, lx, lz, out, a, b, reach = SHADOW.REACH) {
     const vx = base.x - lx, vz = base.z - lz;
     const d = Math.hypot(vx, vz);
-    if (d > SHADOW.REACH || d < SHADOW.NEAR) return false;
+    if (d > reach || d < SHADOW.NEAR) return false;
     const ux = vx / d, uz = vz / d;
     // line of sight: light → a point 0.8 m short of the stone (so its own collider doesn't block)
     if (d > 0.9) {
@@ -171,7 +178,8 @@ export class ShadowSystem {
     const k = 1 - Math.exp(-SHADOW.YAW_SMOOTH * dt);
     for (const st of this.stones) {
       for (const l of this.lights) {
-        if (!ShadowSystem.compute(this.game.collision, st.base, l.pos.x, l.pos.z, o, this._a, this._b)) continue;
+        if (st.body && l.kind === 'ilen') continue; // her own lantern never shadows her body
+        if (!ShadowSystem.compute(this.game.collision, st.base, l.pos.x, l.pos.z, o, this._a, this._b, l.reach)) continue;
         let s = st.shadows.get(l.id);
         if (!s) {
           if (!this.free.length) continue;
@@ -202,8 +210,9 @@ export class ShadowSystem {
       if (s.strength <= 0) { this.release(s, i); continue; }
       const flicker = s.alive ? 1 : 0.55 + 0.45 * Math.abs(Math.sin(this.game.time * 22));
       s.boost = Math.max(this.focus ? 0.8 : 0, s.boost - dt * 2);
-      this.views[s.idx].set(s.stone.base, s.yaw, SHADOW.START, s.len, s.strength * flicker, RIM[s.kind] || RIM.sconce, s.boost);
+      this.views[s.idx].set(s.stone.base, s.yaw, SHADOW.START, s.len, s.strength * flicker, RIM[s.kind] || RIM.sconce, s.boost, s.stone.body ? 0.8 / SHADOW.WIDTH : 1);
       const c = this.colliders[s.idx];
+      if (s.stone.body) { c.enabled = false; continue; } // a body's shadow is never ground
       const half = (s.len + SHADOW.TIP - SHADOW.START) / 2;
       this.game.collision.setTransform(c, s.stone.base.x + s.ux * (SHADOW.START + half), s.stone.base.z + s.uz * (SHADOW.START + half), s.yaw);
       c.hz = Math.max(0.05, half);

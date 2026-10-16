@@ -15,6 +15,8 @@ import { LightPool } from './LightPool.js';
 import { COLORS, glowTexture } from './Palette.js';
 import { World } from '../world/World.js';
 import { ROOM_COUNT } from '../world/levels.js';
+import { FEATURES } from './Features.js';
+import { LightSource } from './LightPool.js';
 import { ShadowSystem } from './ShadowSystem.js';
 import { EchoSystem, Ghost } from './Echo.js';
 import { lightMap } from './LightMap.js';
@@ -159,6 +161,7 @@ export class Game {
     this.story.scene = null;
     this.echoes.clear();
     this.unmaking = null;
+    if (this.sun?.on) this.setSun(false);
     if (this.doorMarrow) { this.doorMarrow.keeper.group.visible = false; this.doorMarrow.light.intensity = 0; }
     this.shadows.ilenActive = false;
     this.shadows.clear();
@@ -405,6 +408,35 @@ export class Game {
     }
   }
 
+  /** SUNDIAL_HUB: after the ring wakes, a sun orbits the Sanctuary once a minute; hold E at the
+   *  Heart altar to run it backwards. It is a light (kind 'sun'), so it sweeps the ring's shadows. */
+  updateSun(dt, input) {
+    const w = this.world;
+    if (!w.ringAwake || this.unmaking) { if (this.sun?.on) this.setSun(false); return; }
+    if (!this.sun) {
+      const m = new THREE.Mesh(new THREE.SphereGeometry(0.45, 12, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(0xfff0c8).multiplyScalar(2.2), toneMapped: false }));
+      const light = new LightSource(0xfff0c8, 0, 14, 1.2);
+      m.add(light);
+      this.scene.add(m);
+      this.sun = { mesh: m, light, a: 0, on: false, rec: { id: 'sun', kind: 'sun', pos: new THREE.Vector3() } };
+    }
+    if (!this.sun.on) this.setSun(true);
+    const back = input.isDown('KeyE') && Math.hypot(this.player.pos.x, this.player.pos.z) < 3.2;
+    this.sun.a += (back ? -3 : 1) * dt * (Math.PI * 2 / 60);
+    this.sun.mesh.position.set(Math.sin(this.sun.a) * 8, 6, Math.cos(this.sun.a) * 8);
+    this.sun.rec.pos.copy(this.sun.mesh.position);
+  }
+
+  setSun(on) {
+    const s = this.sun;
+    s.on = on;
+    s.mesh.visible = on;
+    s.light.intensity = on ? 6 : 0;
+    const L = this.shadows.extraLights, i = L.indexOf(s.rec);
+    if (on && i < 0) L.push(s.rec);
+    if (!on && i >= 0) L.splice(i, 1);
+  }
+
   storyCondition(name) {
     if (name === 'allLostMinutes') return this.world.progress.data.lostMinutes.length >= 6;
     return true;
@@ -560,6 +592,13 @@ export class Game {
     // 2. time: R marks a minute / releases the echo; echoes replay and hold their light
     if (input.wasPressed('KeyR')) this.echoes.press();
     this.echoes.update(dt);
+    // ASH_DARK: inside the Forgetting the lantern dims and reaches only 5 m
+    const room = this.world.activePuzzle;
+    const ash = !!room?.ashZones?.length && room.inAsh(this.player.pos.x, this.player.pos.z);
+    this.player.keeper.lanternDim += ((ash ? 0.4 : 1) - this.player.keeper.lanternDim) * Math.min(1, dt * 4);
+    this.shadows.ilenReach = ash ? 5 : 9;
+    if (ash && Math.random() < 0.5) { const pp = this.player.pos; this.effects.ash.emit(pp.x + (Math.random() - 0.5) * 8, pp.y + 5, pp.z + (Math.random() - 0.5) * 8, 0, -0.6, 0, this.effects.c.ash, 0.07, 8, 0); }
+    if (FEATURES.SUNDIAL_HUB) this.updateSun(dt, input);
     // 2b. light: every fire casts every nearby stone's shadow (Ilen's lantern is a fire)
     this.shadows.ilenActive = true;
     this.shadows.focus = input.isDown('KeyQ');

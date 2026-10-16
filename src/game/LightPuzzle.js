@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { SHADOW, coverDistance, tipDistance } from './ShadowSystem.js';
 import { angleDiff, DEG } from './Palette.js';
 import { MarrowEcho } from './Echo.js';
+import { FEATURES } from './Features.js';
 
 // One room of the temple, built on the five rules ("You are the light"). Data-driven (levels.js).
 //  • Stones never turn; their shadows come from every fire near them (ShadowSystem). Rail stones
@@ -57,6 +58,8 @@ export class LightPuzzle {
     this.socketsT = 0;
     this.socketsDone = false;
     this.keysShown = false;
+    this.ashZones = FEATURES.ASH_DARK ? level.ashZones || [] : [];
+    this.backSigils = parts.backSigils || [];
     this._v = new THREE.Vector3();
     // old dial-puzzle API, kept only while rooms on the old system remain (removed in Phase 6)
     this.relics = new Map(); this.selected = null; this.stats = { rewinds: 0 }; this.hudTimer = null;
@@ -192,6 +195,12 @@ export class LightPuzzle {
   // -------------------------------------------------------------------------------------------
   progress() { this.progressT = 0; }
 
+  /** ASH_DARK: is (x, z) inside one of this room's ash zones? */
+  inAsh(x, z) {
+    for (const r of this.ashZones) if (x >= r[0] && x <= r[1] && z >= r[2] && z <= r[3]) return true;
+    return false;
+  }
+
   /** One-time, non-blocking lines tied to what the player just discovered (levels.js `barks`). */
   bark(name) {
     const line = this.level.barks?.[name];
@@ -288,8 +297,9 @@ export class LightPuzzle {
       ru.near = 0;
       for (let i = 0; i < list.length; i++) {
         const s = list[i];
-        if (!s.alive || s.strength < 0.5 || !this.stoneById.has(s.stone.id)) continue;
-        const valid = sp.stones.includes(s.stone.id);
+        if (!s.alive || s.strength < 0.5) continue;
+        if (s.stone.body ? !sp.body : !this.stoneById.has(s.stone.id)) continue; // body shadows wake only body runes
+        const valid = sp.body ? true : sp.stones.includes(s.stone.id);
         const lat = sp.tip ? tipDistance(s, ru.pos.x, ru.pos.z, sp.tol ?? 0.7) : coverDistance(s, ru.pos.x, ru.pos.z);
         if (valid && s.kind === 'ilen' && !ru.lit) {
           // near-tone feedback for Ilen's own shadows approaching a valid rune

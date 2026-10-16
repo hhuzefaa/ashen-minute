@@ -11,6 +11,7 @@ import { rail as railVisual, brazier } from '../objects/Environment.js';
 import { LightPuzzle, railPoint } from '../game/LightPuzzle.js';
 import { SHADOW } from '../game/ShadowSystem.js';
 import { Progress } from './Progress.js';
+import { FEATURES } from '../game/Features.js';
 
 // The whole temple, built once and kept alive for the entire game. Progress (opened gates,
 // restored rooms, story beats, discoveries, Lost Minutes) persists in localStorage.
@@ -111,7 +112,7 @@ export class World {
     for (const rp of L.runes) {
       const pos = new THREE.Vector3(rp.at[0], rp.y || 0, rp.at[1]);
       const owner = stones.find((s) => s.id === rp.stones[0]);
-      const facing = Math.atan2(-(pos.x - owner.base.x), -(pos.z - owner.base.z));
+      const facing = owner ? Math.atan2(-(pos.x - owner.base.x), -(pos.z - owner.base.z)) : 0;
       const view = new TargetRune(pos, facing, { stele: rp.stele !== false, emblem: rp.emblem });
       ctx.group.add(view.group);
       view.addCollider(this.collision);
@@ -149,8 +150,18 @@ export class World {
       grant = { spec: L.grant, mesh };
     }
     const pickups = (L.lostMinutes || []).map((lm) => this.makeLostMinute(ctx, lm));
+    // BACKWARD_ECHO: warm reversed sigils (a recording started on one replays end → start)
+    const backSigils = FEATURES.BACKWARD_ECHO ? (L.backSigils || []).map((b) => {
+      const m = new THREE.MeshBasicMaterial({ color: new THREE.Color(COLORS.fire).multiplyScalar(1.5), transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
+      const g = new THREE.Group();
+      g.add(new THREE.Mesh(new THREE.RingGeometry(0.62, 0.74, 32).rotateX(-Math.PI / 2), m));
+      g.add(new THREE.Mesh(new THREE.RingGeometry(0.2, 0.3, 3, 1, Math.PI, Math.PI * 2).rotateX(-Math.PI / 2).rotateY(Math.PI), m));
+      g.position.set(b.at[0], 0.05, b.at[1]);
+      ctx.group.add(g);
+      return { x: b.at[0], z: b.at[1] };
+    }) : [];
     const p = new LightPuzzle(this.game, L, {
-      stones, runes, sconces, ember, grant, pickups,
+      stones, runes, sconces, ember, grant, pickups, backSigils,
       braziers: ctx.braziers.slice(prevBraziers),
       readables: ctx.readables.slice(prevRead),
     });

@@ -301,6 +301,7 @@ export const LEVELS = [
     stones: [{ id: 'M', at: [-69, -85.5] }], runes: [],
     sconces: [{ id: 'lm', at: [-70, -94] }],
     lostMinutes: [{ id: 'lm2', at: [-68.5, -81.2], y: 0.9 }],
+    ashZones: [[-45, -38.5, -78, -67.5]], // Tier 3 ASH_DARK only (flag off: ignored)
     bridges: [{ from: [-55, -77.4], to: [-55, -84.6] }],
     build(ctx) {
       platform(ctx, { x0: -72, x1: -38, z0: -78, z1: -67 });
@@ -439,6 +440,7 @@ export const LEVELS = [
     // Lost Minute 6: an echo held at the island's south edge throws R's shadow along the second
     // gap to the far north end — a walk over the abyss on your own past
     lostMinutes: [{ id: 'lm6', at: [35.5, 56], y: 0.9 }],
+    backSigils: [{ at: [42, 38] }], // Tier 3 BACKWARD_ECHO only (flag off: not built)
     ember: [27, 55],
     onComplete: { gates: ['g_L9', 'g_sc_e'], story: 'ring_wakes' },
     build(ctx) {

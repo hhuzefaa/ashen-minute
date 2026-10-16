@@ -105,6 +105,7 @@ export class Keeper {
     this.lanternLight = new THREE.PointLight(COLORS.fire, 10, 12, 1.4); // Ilen is the light: a real pool on the floor
     this.lanternLight.position.y = -0.24;
     this.lanternPivot.add(this.lanternLight);
+    this.lanternDim = 1; // ASH_DARK dims it inside the Forgetting
     this.setEmberLevel(0);
   }
 
@@ -133,7 +134,7 @@ export class Keeper {
     this.lanternPivot.rotation.x = moving ? Math.sin(this.walkPhase * 2) * 0.25 + 0.25 * k : Math.sin(this.time * 1.3) * 0.05;
     this.scarfTail.rotation.x = 0.25 + (moving ? 0.35 * k + s * 0.08 : 0);
     const flicker = 0.85 + Math.sin(this.time * 13) * 0.08 + Math.sin(this.time * 7.3) * 0.07;
-    this.lanternLight.intensity = (this.lanternBase + (this.lanternBoost || 0)) * flicker;
+    this.lanternLight.intensity = (this.lanternBase + (this.lanternBoost || 0)) * flicker * (this.lanternDim ?? 1);
     this.lanternCoreMat.color.set(0xff8a32).multiplyScalar((1.4 + this.emberLevel * 0.9 + (this.lanternBoost || 0) * 1.5) * flicker);
     return moving ? s : 0;
   }

@@ -16,13 +16,14 @@ export const ECHO = Object.freeze({
 });
 const CAP = ECHO.RATE * ECHO.MAX_SEC;
 
-let ghostMat = null, marrowMat = null;
-function ghostMaterial(marrow) {
+let ghostMat = null, marrowMat = null, warmMat = null;
+function ghostMaterial(kind) {
   if (!ghostMat) {
     ghostMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(COLORS.time).multiplyScalar(1.1), transparent: true, opacity: 0.45, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false });
     marrowMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xc8f4ff).multiplyScalar(0.9), transparent: true, opacity: 0.4, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false });
+    warmMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xffc48a).multiplyScalar(1.0), transparent: true, opacity: 0.45, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false });
   }
-  return marrow ? marrowMat : ghostMat;
+  return kind === 'marrow' ? marrowMat : kind === 'warm' ? warmMat : ghostMat;
 }
 
 /** A ghost Keeper: no collision, additive cyan body, a LightSource lantern (no real light). */
@@ -30,7 +31,7 @@ export class Ghost {
   constructor(scene, { marrow = false } = {}) {
     this.keeper = new Keeper();
     const k = this.keeper;
-    const mat = ghostMaterial(marrow);
+    const mat = ghostMaterial(marrow ? 'marrow' : 'echo');
     k.group.traverse((o) => { if (o.isMesh) { o.material = mat; o.castShadow = false; } });
     k.lanternPivot.remove(k.lanternLight);       // no extra real light: shader cost stays fixed
     k.lanternLight = { intensity: 0 };
@@ -42,6 +43,12 @@ export class Ghost {
     scene.add(k.group);
     this.lightRec = { id: '', kind: marrow ? 'marrow' : 'echo', pos: new THREE.Vector3() };
     this.alpha = 0;
+  }
+
+  /** BACKWARD_ECHO: a reversed echo is tinted warmer. */
+  tint(kind) {
+    const mat = ghostMaterial(kind);
+    this.keeper.group.traverse((o) => { if (o.isMesh) o.material = mat; });
   }
 
   place(x, y, z, facing) {
@@ -95,7 +102,9 @@ export class EchoSystem {
     if (live.length >= this.maxEchoes) this.crumble(live[0]);
     const buf = this.bufs.find((b) => !this.echoes.some((e) => e.buf === b));
     const p = this.game.player;
-    this.rec = { buf, n: 0, acc: 0, t: 0 };
+    const room = this.game.world.activePuzzle;
+    const back = !!room?.backSigils?.some((b) => Math.hypot(b.x - p.pos.x, b.z - p.pos.z) < 0.9);
+    this.rec = { buf, n: 0, acc: 0, t: 0, back };
     this.sample();
     this.sigil.position.set(p.pos.x, p.pos.y + 0.05, p.pos.z);
     this.sigil.visible = true;
@@ -123,7 +132,8 @@ export class EchoSystem {
     if (!r || r.n / ECHO.RATE < ECHO.MIN_SEC) { this.game.audio.play('sfx_no_memory'); return; }
     const ghost = this.ghosts.find((g) => !this.echoes.some((e) => e.ghost === g));
     if (!ghost) return;
-    const e = { id: 'echo:' + this.nextId++, ghost, buf: r.buf, n: r.n, t: 0, state: 'replay', holdT: 0, permanent: this.permanent, warned: false };
+    const e = { id: 'echo:' + this.nextId++, ghost, buf: r.buf, n: r.n, t: 0, state: 'replay', holdT: 0, permanent: this.permanent, warned: false, back: r.back };
+    ghost.tint(r.back ? 'warm' : 'echo');
     ghost.lightRec.id = e.id;
     ghost.keeper.group.visible = true;
     ghost.alpha = 0;
@@ -138,7 +148,8 @@ export class EchoSystem {
   }
 
   pose(e, dt) {
-    const f = Math.min(e.t * ECHO.RATE, e.n - 1);
+    const fw = Math.min(e.t * ECHO.RATE, e.n - 1);
+    const f = e.back ? e.n - 1 - fw : fw; // a backward echo walks its minute from the end to the start
     const i = Math.floor(f), j = Math.min(i + 1, e.n - 1), k = f - i;
     const b = e.buf, oi = i * ECHO.STRIDE, oj = j * ECHO.STRIDE;
     const x = b[oi] + (b[oj] - b[oi]) * k, y = b[oi + 1] + (b[oj + 1] - b[oi + 1]) * k, z = b[oi + 2] + (b[oj + 2] - b[oi + 2]) * k;
@@ -193,6 +204,9 @@ export class EchoSystem {
         if (left <= ECHO.WARN && !e.warned) { e.warned = true; this.game.audio.play('sfx_bridge_warning'); }
         if (left <= 0) { this.crumble(e); continue; }
       }
+      // ASH_DARK: an echo that walks into the Forgetting crumbles
+      const gp = g.keeper.group.position;
+      if (this.game.world.activePuzzle?.ashZones?.length && this.game.world.activePuzzle.inAsh(gp.x, gp.z) && !e.permanent) { this.crumble(e); continue; }
       this.pose(e, dt);
       const left = e.state === 'hold' && !e.permanent ? ECHO.HOLD - e.holdT : 99;
       const flick = left < ECHO.WARN ? 0.35 + 0.65 * Math.abs(Math.sin(this.game.time * 18)) : 1;
