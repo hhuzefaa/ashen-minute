@@ -9,11 +9,11 @@ export class AudioManager {
   }
 
   /** Must be called from a user gesture (Play button). Safe to call repeatedly. */
-  init() {
+  init(offlineCtx = null) {
     if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
     const AC = window.AudioContext || window.webkitAudioContext;
-    if (!AC) return;
-    this.ctx = new AC();
+    if (!AC && !offlineCtx) return;
+    this.ctx = offlineCtx || new AC(); // offline context is used by tests/audio_check.py
     const c = this.ctx;
     this.master = c.createGain();
     this.master.gain.value = this.muted ? 0 : 0.9;
@@ -128,9 +128,9 @@ export class AudioManager {
     const t = this.ctx.currentTime + 0.01;
     switch (name) {
       case 'sfx_relic_ignite':
-        this._noise(t, 0.6, { gain: 0.5, f0: 300, f1: 3200, q: 0.8, attack: 0.02 });
+        this._noise(t, 0.6, { gain: 0.75, f0: 300, f1: 3200, q: 0.8, attack: 0.02 });
         this._noise(t + 0.05, 1.2, { gain: 0.25, type: 'lowpass', f0: 900, f1: 200, buf: this.brown, attack: 0.05 });
-        this._tone(70, t, 0.7, { type: 'sine', gain: 0.5, glideTo: 40, rev: 0.2 });
+        this._tone(70, t, 0.7, { type: 'sine', gain: 0.7, glideTo: 40, rev: 0.2 });
         this._tone(220, t + 0.05, 1.4, { type: 'triangle', gain: 0.08, attack: 0.15, rev: 0.6 });
         this._tone(330, t + 0.12, 1.4, { type: 'triangle', gain: 0.06, attack: 0.2, rev: 0.6 });
         break;
@@ -152,11 +152,11 @@ export class AudioManager {
         break;
       }
       case 'sfx_bridge_warning':
-        this._tone(880, t, 0.12, { type: 'square', gain: 0.05, rev: 0.4 });
-        this._tone(660, t + 0.16, 0.18, { type: 'square', gain: 0.05, rev: 0.4 });
+        this._tone(880, t, 0.14, { type: 'square', gain: 0.14, rev: 0.4 });
+        this._tone(660, t + 0.16, 0.2, { type: 'square', gain: 0.14, rev: 0.4 });
         break;
       case 'tick':
-        this._tone(1320, t, 0.05, { type: 'triangle', gain: 0.06, rev: 0.2 });
+        this._tone(1320, t, 0.06, { type: 'triangle', gain: 0.15, rev: 0.2 });
         break;
       case 'sfx_bridge_fade':
         this._noise(t, 0.9, { gain: 0.3, type: 'lowpass', f0: 600, f1: 80, buf: this.brown, attack: 0.02 });
@@ -193,13 +193,13 @@ export class AudioManager {
         break;
       }
       case 'sfx_ui_click':
-        this._tone(1400, t, 0.04, { type: 'triangle', gain: 0.06, rev: 0.1 });
+        this._tone(1400, t, 0.05, { type: 'triangle', gain: 0.12, rev: 0.1 });
         break;
       case 'sfx_no_memory':
-        this._tone(180, t, 0.35, { type: 'triangle', gain: 0.12, glideTo: 120, rev: 0.4 });
+        this._tone(180, t, 0.4, { type: 'triangle', gain: 0.3, glideTo: 120, rev: 0.4 });
         break;
       case 'sfx_collar_stop':
-        this._tone(110, t, 0.12, { type: 'sine', gain: 0.25, rev: 0.2 });
+        this._tone(110, t, 0.14, { type: 'sine', gain: 0.4, rev: 0.2 });
         this._noise(t, 0.05, { gain: 0.15, f0: 900, q: 3, rev: 0.1 });
         break;
       case 'sfx_jolt':
@@ -207,10 +207,10 @@ export class AudioManager {
         this._tone(160, t, 1.0, { type: 'sawtooth', gain: 0.05, glideTo: 60, rev: 0.5 });
         break;
       case 'sfx_fall':
-        this._noise(t, 0.7, { gain: 0.2, f0: 1500, f1: 200, q: 1, rev: 0.5 });
+        this._noise(t, 0.7, { gain: 0.45, f0: 1500, f1: 200, q: 1, rev: 0.5 });
         break;
       case 'step':
-        this._noise(t, 0.07, { gain: 0.07 + Math.random() * 0.03, type: 'lowpass', f0: 500 + Math.random() * 300, rev: 0.25 });
+        this._noise(t, 0.07, { gain: 0.1 + Math.random() * 0.04, type: 'lowpass', f0: 500 + Math.random() * 300, rev: 0.25 });
         break;
       case 'sfx_door':
         this._noise(t, 2.2, { gain: 0.35, type: 'lowpass', f0: 260, f1: 140, buf: this.brown, attack: 0.3, rev: 0.5 });
@@ -262,7 +262,7 @@ export class AudioManager {
     if (name === 'amb_fire_crackle') {
       const s = c.createBufferSource(); s.buffer = this.crackleBuf; s.loop = true;
       const f = c.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 500;
-      const g = c.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.35, t + 0.6);
+      const g = c.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(1.0, t + 0.6);
       s.connect(f).connect(g).connect(this.amb);
       s.start();
       this.loops[name] = { stop: (tt) => { g.gain.setTargetAtTime(0.0001, tt, 0.15); s.stop(tt + 0.8); } };
