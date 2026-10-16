@@ -323,7 +323,7 @@ export class Game {
   restartPuzzle() {
     if (this.state !== STATE.PLAYING) return;
     const p = this.world.activePuzzle;
-    if (!p || p.completed) { this.respawn(); return; }
+    if (!p || (p.level.hub && !this.world.progress.data.completed.includes(9))) { this.respawn(); return; }
     this.ui.fadeTo(1, 0.25);
     setTimeout(() => {
       this.world.restartActivePuzzle();

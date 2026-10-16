@@ -12,7 +12,7 @@ The competition rules say:
 - Use OBS Studio (free) or the Xbox Game Bar (Win+G). Record at 1920×1080, 60 fps, from a production build (`npm run build && npm run preview`). Open the game in full-screen Chrome with F11.
 - Turn the game sound on, and record system audio, because the sound design is scored.
 - Record **several full runs** and edit afterwards. Don't try to get a perfect single take.
-- Move the mouse slowly and smoothly. Stop briefly on key moments: ignition, the bridge forming, the rewind, the Room 3 timer and the Heart Ember.
+- Move the mouse slowly and smoothly. Stop briefly on key moments: ignition, the bridge forming, the rewind, the span timers and the Heart Ember.
 - For the theme callouts, hold **Q** (Focus) for a moment while recording so the shadow line and memory trail are visible.
 
 ## Edit timeline
@@ -31,7 +31,7 @@ The competition rules say:
 
 Gameplay total: about 2:05 (more than 2:00). Teaser plus ending: about 0:55.
 
-**Tip for recording late levels:** finish a full run once and keep that browser profile. Your save lets you **Continue** from any checkpoint, and every opened gate stays open, so you can re-record any level's area. To replay a puzzle from the start, stand in its room and press **Backspace**.
+**Tip for recording late levels:** finish a full run once and keep that browser profile. Your save lets you **Continue** from any checkpoint, and every opened gate stays open, so you can walk back to any level. To replay a puzzle (even a solved one) from the start, stand in its room and press **Backspace**. Your doors and embers are kept.
 
 ## Before uploading
 

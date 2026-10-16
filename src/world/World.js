@@ -293,11 +293,21 @@ export class World {
     this.progress.save();
   }
 
+  /** Backspace: reset the current puzzle. Works on solved levels too (to replay / re-record);
+   *  world progress — opened gates, earned embers — is never taken away. */
   restartActivePuzzle() {
     const p = this.activePuzzle;
-    if (!p || p.completed) return false;
-    if (p === this.l10) p.level.allSocketsDone = false;
+    if (!p) return false;
+    const ringAwake = this.progress.data.completed.includes(9);
+    if (p === this.l10) {
+      if (!ringAwake) return false;
+      p.level.allSocketsDone = false;
+      this.finalBridge.hideImmediate();
+      this.heart.sealLevel = 0;
+    }
     p.reset();
+    p.completed = false;
+    if (p.ember) { p.ember.collected = false; p.ember.group.visible = true; }
     if (p === this.l10) for (const rs of p.relics.values()) rs.awake = true;
     return true;
   }
