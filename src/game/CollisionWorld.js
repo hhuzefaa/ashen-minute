@@ -42,6 +42,12 @@ export class CollisionWorld {
   /** Update a dynamic collider's transform. */
   move(c, cx, cz) { c.cx = cx; c.cz = cz; }
 
+  /** Update a dynamic collider's position and yaw (moving shadows). */
+  setTransform(c, cx, cz, yaw) {
+    c.cx = cx; c.cz = cz;
+    if (yaw !== c.yaw) { c.yaw = yaw; c.cos = Math.cos(yaw); c.sin = Math.sin(yaw); }
+  }
+
   /** Candidate colliders overlapping the XZ rectangle. */
   query(minX, minZ, maxX, maxZ) {
     const out = this._list, seen = this._set;

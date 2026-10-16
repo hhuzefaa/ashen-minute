@@ -223,7 +223,7 @@ export function arch(ctx, x, z, { width = 2.8, height = 3.6, yaw = 0, door = fal
 }
 
 /** Brazier (OBJ_Brazier): starts cold; Game lights it when the room's relic ignites. */
-export function brazier(ctx, x, z, { eternal = false, lit = false, dormant = false } = {}) {
+export function brazier(ctx, x, z, { eternal = false, lit = false, dormant = false, sconce = false, id = null, burn = 20 } = {}) {
   const { group, world } = ctx;
   const g = new THREE.Group();
   const pts = [new THREE.Vector2(0.0, 0), new THREE.Vector2(0.28, 0), new THREE.Vector2(0.18, 0.15), new THREE.Vector2(0.14, 0.75),
@@ -241,8 +241,15 @@ export function brazier(ctx, x, z, { eternal = false, lit = false, dormant = fal
   const light = new LightSource(COLORS.fire, 0, 9, 1.6);
   light.position.set(x, 1.6, z);
   group.add(light);
-  world.addBox(x - 0.35, 0, z - 0.35, x + 0.35, 1.1, z + 0.35, 'wall');
+  // 'prop', not 'wall': a brazier must never block its own light's line of sight
+  world.addBox(x - 0.35, 0, z - 0.35, x + 0.35, 1.1, z + 0.35, 'prop');
   const b = { pos: new THREE.Vector3(x, 1.12, z), light, coalsMat, lit: lit || (eternal && !dormant), level: lit || (eternal && !dormant) ? 1 : 0, delay: 0, eternal, group: g };
+  if (sconce) {
+    // gameplay sconce: a carved gold ring on the floor says "this fire is yours to light"
+    b.sconce = true; b.id = id; b.burn = burn; b.burnT = 0;
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.62, 0.74, 24), new THREE.MeshBasicMaterial({ color: new THREE.Color(COLORS.target).multiplyScalar(0.8), toneMapped: false, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2; ring.position.y = 0.03; g.add(ring);
+  }
   if (eternal) {
     // eternal hearth: a ring of carved stones marks a flame you can take with your lantern
     const ring = new THREE.Mesh(new THREE.TorusGeometry(0.75, 0.08, 4, 16), new THREE.MeshBasicMaterial({ color: new THREE.Color(COLORS.fire).multiplyScalar(1.6), toneMapped: false }));
