@@ -1,0 +1,22 @@
+{
+  "name": "ashen-minutes",
+  "version": "1.0.0",
+  "description": "Ashen Minutes — a Fire / Shadow / Time 3D puzzle game (Three.js + Vite)",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "author": "Huzefa",
+  "license": "MIT",
+  "dependencies": {
+    "@fontsource/cinzel": "^5.3.0",
+    "@fontsource/inter": "^5.3.0",
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "vite": "^8.3.4"
+  },
+  "private": true,
+  "type": "module"
+}

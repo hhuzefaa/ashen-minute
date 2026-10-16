@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ashen Minutes</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 3 L24 16 L16 29 L8 16 Z' fill='%23FF8A32'/%3E%3C/svg%3E" />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="game"></canvas>
+
+      <!-- Rewind tint -->
+      <div id="vignette-rewind" class="vignette"></div>
+      <div id="vignette-warn" class="vignette"></div>
+
+      <!-- HUD -->
+      <div id="hud" class="hidden">
+        <div id="hud-top">
+          <div id="embers" aria-label="Embers collected">
+            <span class="ember-slot"></span><span class="ember-slot"></span><span class="ember-slot"></span>
+            <span id="ember-count">0/3</span>
+          </div>
+          <div id="objective"></div>
+        </div>
+        <div id="themes">
+          <span class="theme" id="theme-fire" title="Fire">
+            <svg viewBox="0 0 24 24"><path d="M12 2c1 4 5 6 5 11a5 5 0 0 1-10 0c0-3 2-4 2-7 2 1 3 3 3 5 1-2 1-5 0-9z"/></svg>
+          </span>
+          <span class="theme" id="theme-shadow" title="Shadow">
+            <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18A7 7 0 0 1 12 3z"/></svg>
+          </span>
+          <span class="theme" id="theme-time" title="Time">
+            <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 1-8.5 6M3 4v5h5M12 7v5l3 3" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+        </div>
+        <div id="timer" class="hidden">
+          <svg viewBox="0 0 64 64"><circle class="track" cx="32" cy="32" r="27"/><circle id="timer-ring" class="ring" cx="32" cy="32" r="27"/></svg>
+          <span id="timer-text">8</span>
+        </div>
+        <div id="memory" class="hidden">
+          <span id="memory-label">◀◀ MEMORY</span>
+          <div id="memory-bar"><div id="memory-fill"></div></div>
+        </div>
+        <div id="prompt"></div>
+        <div id="subprompt"></div>
+        <div id="crosshair"></div>
+      </div>
+
+      <!-- Center cards -->
+      <div id="card" class="hidden"><div id="card-kicker"></div><div id="card-title"></div></div>
+      <div id="flash-text" class="hidden"></div>
+
+      <!-- Screens -->
+      <div id="screen-title" class="screen">
+        <div class="title-wrap">
+          <div class="title-kicker">FIRE · SHADOW · TIME</div>
+          <h1 class="logo">ASHEN<span>MINUTES</span></h1>
+          <p class="tagline">The temple remembers what the world has forgotten.</p>
+          <div class="menu">
+            <button data-action="play" class="primary">Play</button>
+            <button data-action="controls">Controls</button>
+            <button data-action="credits">Credits</button>
+            <button data-action="mute" class="mute-btn">Sound: On</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="screen-pause" class="screen hidden">
+        <div class="panel">
+          <h2>Paused</h2>
+          <div class="menu">
+            <button data-action="resume" class="primary">Resume</button>
+            <button data-action="restart-room">Restart Room</button>
+            <button data-action="controls">Controls</button>
+            <button data-action="main-menu">Main Menu</button>
+            <button data-action="mute" class="mute-btn">Sound: On</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="screen-victory" class="screen hidden">
+        <div class="panel victory">
+          <div class="title-kicker">THE HEART EMBER BURNS AGAIN</div>
+          <h2 class="victory-title">The Temple Remembers</h2>
+          <p id="victory-stats"></p>
+          <div class="menu">
+            <button data-action="play-again" class="primary">Play Again</button>
+            <button data-action="main-menu">Main Menu</button>
+            <button data-action="credits">Credits</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="screen-controls" class="screen overlay hidden">
+        <div class="panel">
+          <h2>Controls</h2>
+          <table class="controls">
+            <tr><td><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></td><td>Move</td></tr>
+            <tr><td><kbd>Mouse</kbd></td><td>Look (click the game to capture the mouse)</td></tr>
+            <tr><td><kbd>E</kbd></td><td>Ignite relic</td></tr>
+            <tr><td><kbd>A</kbd><kbd>D</kbd> / <kbd>←</kbd><kbd>→</kbd></td><td>Turn a lit relic while standing beside it</td></tr>
+            <tr><td><kbd>R</kbd> hold</td><td>Rewind the relic's recent memory</td></tr>
+            <tr><td><kbd>Q</kbd> hold</td><td>Focus: reveal the shadow route</td></tr>
+            <tr><td><kbd>Space</kbd></td><td>Small hop (never required)</td></tr>
+            <tr><td><kbd>Backspace</kbd></td><td>Restart room</td></tr>
+            <tr><td><kbd>Esc</kbd></td><td>Pause</td></tr>
+            <tr><td><kbd>M</kbd></td><td>Mute</td></tr>
+          </table>
+          <div class="menu"><button data-action="close-overlay" class="primary">Back</button></div>
+        </div>
+      </div>
+
+      <div id="screen-credits" class="screen overlay hidden">
+        <div class="panel credits">
+          <h2>Credits</h2>
+          <p><b>Ashen Minutes</b> — design, code, models and sound by <span class="author">Huzefa</span>.</p>
+          <p>Every model, texture, particle and sound in the game is generated in code at runtime. No third-party art or audio assets are used.</p>
+          <p class="small">Built with Three.js (MIT) and Vite (MIT). Typefaces: Cinzel and Inter (SIL Open Font License 1.1).</p>
+          <div class="menu"><button data-action="close-overlay" class="primary">Back</button></div>
+        </div>
+      </div>
+
+      <div id="fade"></div>
+      <div id="loading">Kindling…</div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
