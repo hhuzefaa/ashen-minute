@@ -8,8 +8,10 @@ import { ShadowBridge } from '../objects/ShadowBridge.js';
 import { EmberPickup } from '../objects/EmberPickup.js';
 import { HeartEmber } from '../objects/HeartEmber.js';
 import { Gate } from '../objects/Gate.js';
-import { rail as railVisual } from '../objects/Environment.js';
+import { rail as railVisual, brazier } from '../objects/Environment.js';
 import { Puzzle, RelicState, railPoint } from '../game/Puzzle.js';
+import { LightPuzzle } from '../game/LightPuzzle.js';
+import { SHADOW } from '../game/ShadowSystem.js';
 import { Progress } from './Progress.js';
 
 // The whole temple, built once and kept alive for the entire game. Progress (opened gates,
@@ -25,6 +27,7 @@ export class World {
     this.zones = [];
     this.gates = new Map();
     this.puzzles = [];
+    this.lightPuzzles = [];
     this.levelById = new Map();
     this.progress = new Progress();
     this.activePuzzle = null;
@@ -64,11 +67,85 @@ export class World {
       this.gates.set(gd.id, g);
     }
     for (const L of LEVELS) this.buildLevel(L);
+    this.checkRuleTruth();
     this.applyProgress();
+  }
+
+  /** Rule 1 must never lie: every brazier within REACH of a stone has to be a gameplay sconce. */
+  checkRuleTruth() {
+    const stones = this.lightPuzzles.flatMap((p) => p.stones);
+    this.ruleWarnings = [];
+    for (const z of this.zones) for (const b of z.ctx.braziers) {
+      if (b.sconce) continue;
+      for (const st of stones) {
+        const d = Math.hypot(b.pos.x - st.base.x, b.pos.z - st.base.z);
+        if (d <= SHADOW.REACH) {
+          const w = `decorative brazier at (${b.pos.x}, ${b.pos.z}) is ${d.toFixed(1)} m from stone ${st.id} — rule 1 would lie`;
+          this.ruleWarnings.push(w);
+          console.warn('[rules]', w);
+        }
+      }
+    }
+  }
+
+  /** A room built on the five rules (levels.js `v2: true`). */
+  buildLightLevel(L, zone) {
+    const ctx = zone.ctx;
+    const prevBraziers = ctx.braziers.length;
+    const prevRead = ctx.readables.length;
+    L.build(ctx);
+    const stones = [];
+    for (const sp of L.stones) {
+      const base = new THREE.Vector3(sp.at[0], sp.y || 0, sp.at[1]);
+      const ped = sp.ped ?? 0.95;
+      const relic = new Relic({ position: base, pedestalHeight: ped, startYaw: (sp.faceDeg ?? 0) * DEG });
+      relic.stone = true;
+      relic.group.traverse((o) => { o.castShadow = false; }); // only fires cast a stone's shadow (no moon shadow)
+      ctx.group.add(relic.group);
+      const collider = this.collision.add({ cx: base.x, cy: ped / 2, cz: base.z, hx: 0.55, hy: ped / 2, hz: 0.55, tag: 'wall' });
+      stones.push({ id: sp.id, spec: sp, relic, base: relic.base, collider, dormant: !!sp.dormant, awake: false, shadows: new Map(), glow: 0 });
+    }
+    const runes = new Map();
+    for (const rp of L.runes) {
+      const pos = new THREE.Vector3(rp.at[0], rp.y || 0, rp.at[1]);
+      const owner = L.stones.find((s) => s.id === rp.stones[0]);
+      const facing = Math.atan2(-(pos.x - owner.at[0]), -(pos.z - owner.at[1]));
+      const view = new TargetRune(pos, facing, { stele: rp.stele !== false, emblem: rp.emblem });
+      ctx.group.add(view.group);
+      view.addCollider(this.collision);
+      let bridge = null;
+      if (rp.bridge) {
+        bridge = new ShadowBridge(new THREE.Vector3(rp.bridge.from[0], 0, rp.bridge.from[1]), new THREE.Vector3(rp.bridge.to[0], 0, rp.bridge.to[1]), this.collision);
+        ctx.group.add(bridge.group);
+      }
+      runes.set(rp.id, { spec: rp, view, pos, lit: false, bridge, coverKey: null, coverT: 0, wrongKey: null, covered: false, near: 0 });
+    }
+    const sconces = [];
+    for (const sc of L.sconces || []) {
+      const b = brazier(ctx, sc.at[0], sc.at[1], { sconce: true, id: sc.id, burn: sc.burn ?? 20 });
+      b.lightId = 's:' + sc.id;
+      b.relayT = 0;
+      sconces.push(b);
+    }
+    let ember = null;
+    if (L.ember) {
+      ember = new EmberPickup(new THREE.Vector3(L.ember[0], L.emberY ?? 1.1, L.ember[1]));
+      ctx.group.add(ember.group);
+    }
+    const p = new LightPuzzle(this.game, L, {
+      stones, runes, sconces, ember,
+      braziers: ctx.braziers.slice(prevBraziers),
+      readables: ctx.readables.slice(prevRead),
+    });
+    p.zone = zone;
+    this.puzzles.push(p);
+    this.lightPuzzles.push(p);
+    this.levelById.set(L.id, p);
   }
 
   buildLevel(L) {
     const zone = L.hub ? this.hubZone : this.zones.find((z) => z.key === 'L' + L.id) || this.makeLevelZone(L);
+    if (L.v2) { this.buildLightLevel(L, zone); return; }
     const ctx = zone.ctx;
     const prevBraziers = ctx.braziers.length;
     const prevRead = ctx.readables.length;
@@ -266,10 +343,16 @@ export class World {
       if (!z.group.visible) continue;
       for (const b of z.ctx.braziers) {
         if (b.lit) b.level = Math.min(1, b.level + dt * 1.5);
-        const lv = b.lit ? b.level : 0;
-        if (lv > 0) this.game.effects.flame(b.pos, (b.eternal ? 40 : 22) * lv * this.game.fxScale, dt, b.eternal ? 0.5 : 0.35, b.eternal ? 1.3 : 0.9);
+        let lv = b.lit ? b.level : 0;
         const t = this.game.time;
-        const flick = 0.85 + Math.sin(t * 13 + b.pos.x) * 0.08 + Math.sin(t * 7.7 + b.pos.z) * 0.07;
+        let flick = 0.85 + Math.sin(t * 13 + b.pos.x) * 0.08 + Math.sin(t * 7.7 + b.pos.z) * 0.07;
+        if (b.sconce) {
+          if (b.lit && Number.isFinite(b.burn)) {
+            lv *= 0.45 + 0.55 * Math.min(1, b.burnT / b.burn);          // burns down
+            if (b.burnT < 3) flick *= 0.45 + 0.55 * Math.abs(Math.sin(t * 19)); // gutters before it dies
+          } else if (!b.lit && Math.sin(t * 3.1 + b.pos.x) > 0.6) this.game.effects.flame(b.pos, 3 * this.game.fxScale, dt, 0.12, 0.35);
+        }
+        if (lv > 0) this.game.effects.flame(b.pos, (b.eternal ? 40 : 22) * lv * this.game.fxScale, dt, b.eternal ? 0.5 : 0.35, b.eternal ? 1.3 : 0.9);
         b.light.intensity = lv * (b.eternal ? 8 : 5) * flick;
         b.coalsMat.color.set(lv > 0 ? 0xff8a32 : 0x1a1210).multiplyScalar(lv > 0 ? 0.6 + lv * 1.4 * flick : 1);
       }

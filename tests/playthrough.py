@@ -155,6 +155,55 @@ with sync_playwright() as pw:
         adv(0.3)
         return d
 
+    # ---- light-room helpers (the five rules) ----
+    def wait_until(js, max_sec=5.0, dt=0.1):
+        for _ in range(int(max_sec / dt)):
+            if ev(js): return True
+            adv(dt)
+        return bool(ev(js))
+
+    def rune_triggered(rid): return ev(f'!!{P}.runes.get("{rid}").lit')
+
+    def stand_at(x, z, yaw=None):
+        ev(f'{S}.player.pos.set({x}, 0, {z}); {S}.player.vel.set(0,0,0);' + (f'{S}.player.facing = {yaw}; {S}.cameraCtl.yaw = {yaw};' if yaw is not None else ''))
+        adv(1/30)
+
+    def lantern_at(x, z, yaw=0.0):
+        """Place the Keeper so her lantern hangs over (x, z) (it swings at her hip)."""
+        for _ in range(4):
+            ev(f'''(() => {{ const g={S}, v=new g.player.pos.constructor(); g.player.facing={yaw}; g.player.syncVisual();
+              g.player.keeper.group.updateMatrixWorld(true); g.player.keeper.lanternCore.getWorldPosition(v);
+              g.player.pos.x += {x} - v.x; g.player.pos.z += {z} - v.z; g.player.vel.set(0,0,0); g.player.syncVisual(); }})()''')
+        adv(1/30)
+
+    def ilen_shadow(stone='A'):
+        return ev(f'''(() => {{ const st={P}.stoneById.get("{stone}"); const s=st && st.shadows.get('ilen');
+          if (!s) return null; const v=new {S}.player.pos.constructor(); {S}.player.keeper.lanternCore.getWorldPosition(v);
+          const want=Math.atan2(-(st.base.x-v.x), -(st.base.z-v.z));
+          return {{ yaw: s.yaw, want, err: Math.abs(Math.atan2(Math.sin(s.yaw-want), Math.cos(s.yaw-want)))*180/Math.PI, len: s.len, d: s.d }}; }})()''')
+
+    def sconce(sid): return f'{P}.sconces.find(b => b.id === "{sid}")'
+
+    def kindle(sid):
+        b = ev(f'(() => {{ const b={sconce(sid)}; return [b.pos.x, b.pos.z]; }})()')
+        stand_at(b[0] + 1.3, b[1] + 0.2)
+        press('KeyE'); adv(0.2)
+        return ev(f'{sconce(sid)}.lit')
+
+    def shadow_of(stone, light):
+        return ev(f'''(() => {{ const s={P}.stoneById.get("{stone}").shadows.get("{light}");
+          return s ? {{ len: s.len, ux: s.ux, uz: s.uz, bx: s.stone.base.x, bz: s.stone.base.z, strength: s.strength, alive: s.alive, on: {S}.shadows.colliders[s.idx].enabled }} : null; }})()''')
+
+    def walk_shadow(stone, light, a0=1.4, a1=None, beyond=2.0):
+        """Walk on foot along a shadow from distance a0 to its end (+beyond). Returns (no falls, final pos)."""
+        s = shadow_of(stone, light)
+        a1 = (s['len'] if a1 is None else a1) + beyond
+        f0 = ev('window.__falls')
+        stand_at(s['bx'] + s['ux'] * a0, s['bz'] + s['uz'] * a0, math.atan2(-s['ux'], -s['uz']))
+        d = walk_to(s['bx'] + s['ux'] * a1, s['bz'] + s['uz'] * a1, 12)
+        adv(1.0)  # a fall takes ~0.8 s to register
+        return ev('window.__falls') == f0, ev(f'[{S}.player.pos.x, {S}.player.pos.z, {S}.player.grounded]')
+
     def level_done(i): return ev(f'{S}.world.progress.data.completed.includes({i})')
 
     def skip_scene():
@@ -210,12 +259,36 @@ with sync_playwright() as pw:
     down('KeyW'); adv(1.5); up('KeyW'); adv(0.2)
     check('a sealed gate blocks the way', ev(f'{S}.player.pos.z') > 33.3, f"z={ev(f'{S}.player.pos.z'):.2f}")
 
-    # ===================================================================== L1
+    # ===================================================================== L1 · The Threshold (rules 1 + 3)
     teleport(0, 58, 0)
-    check('L1 entered (active puzzle)', ev(f'{P} && {P}.level.id') == 1)
-    stand_behind('A')
-    check('L1 ignite', ignite('A'))
-    check('L1 turn → rune', turn_to_lock('A'))
+    check('L1 entered (active puzzle is a light room)', ev(f'{P} && {P}.level.id') == 1 and ev(f'{P}.isLight'))
+    rw = ev(f'{S}.world.ruleWarnings')
+    check('rule 1 is truthful: no decorative fire within reach of any stone', len(rw) == 0, '; '.join(rw))
+    lm = ev(f'{S}.debug.lightMap(1)')
+    check('L1 light map: rune a wakes only from a zone behind the stone', lm['runes']['a']['valid'] > 5 and lm['runes']['a']['wrong'] == 0, f"{lm['runes']['a']['valid']} samples, zone {lm['runes']['a']['zone']}")
+    # rune→stone line: the lantern must stand on its far side, 4.1–9 m behind the stone
+    st = ev(f'(() => {{ const b={P}.stoneById.get("A").base, r={P}.runes.get("a").pos; return [b.x, b.z, r.x, r.z]; }})()')
+    ux, uz = st[2] - st[0], st[3] - st[1]; L = math.hypot(ux, uz); ux, uz = ux / L, uz / L
+    behind = lambda d: (st[0] - ux * d, st[1] - uz * d)
+    worst = 0
+    for (x, z) in ((-3, 56), (2, 55), (-5, 50), (3, 51), (0, 57)):
+        lantern_at(x, z); adv(0.4)
+        sh = ilen_shadow(); worst = max(worst, sh['err'] if sh else 99)
+    check('L1 the shadow follows the lantern (yaw error < 2°)', worst < 2.0, f'worst {worst:.2f}°')
+    lantern_at(*behind(2.0)); adv(0.4); l_near = ilen_shadow()['len']
+    lantern_at(*behind(4.0)); adv(0.4); l_far = ilen_shadow()['len']
+    check('L1 stepping back lengthens the shadow', l_far > l_near + 2.8, f'{l_near:.1f} m → {l_far:.1f} m')
+    lantern_at(*behind(2.5)); adv(1.5)
+    check('L1 too short from near the stone (rune stays asleep)', not rune_triggered('a'))
+    # walking quickly across the valid zone must not wake it (settle rule)
+    px, pz = -uz, ux
+    cx, cz = behind(6.0)
+    stand_at(cx - px * 3, cz - pz * 3); walk_to(cx + px * 3, cz + pz * 3, 6)
+    check('L1 walking past the zone does not trigger (0.4 s settle)', not rune_triggered('a'))
+    lantern_at(cx, cz); ok = wait_until(f'{P}.runes.get("a").lit', 2.0, 1/30)
+    t_settle = ev(f'{P}.runes.get("a").coverT')
+    check('L1 standing in the zone wakes the rune', ok, f'settled after {t_settle:.2f}s')
+    check('L1 the stone glows gold while its shadow rests on the rune', ev(f'{P}.stoneById.get("A").relic.glow') > 0.5)
     adv(1.0)
     shot('11_L1_bridge')
     ok, far = walk_bridge('a'); check('L1 bridge walked', ok, f'{far:.2f}')
@@ -231,19 +304,74 @@ with sync_playwright() as pw:
     check('walk through the L1 gate and gallery into the hub', d < 1.0, f'dist {d:.2f}')
     check('hub arrival scene seen', ev(f'{S}.world.progress.data.story.includes("hub_first")'))
 
-    # ===================================================================== L2
+    # ===================================================================== L2 · The Loose Shadow (rules 2 + 4)
     for (x, z) in ((-10, 15), (-17, 14), (-17, 0), (-30, 0)): walk_to(x, z, 12, sprint=True)
     d = walk_to(-36, 0, 6)
     check('walk through the hub west gate to L2', d < 1.0 and ev(f'{P} && {P}.level.id') == 2, f'{d:.2f}')
-    stand_behind('A'); ignite('A'); wait_jolt('A')
+    # the naive attempt: walk toward the far end of your own shadow lying across the chasm
+    stand_at(-38, 1.5, math.pi / 2); adv(0.5)
+    sh = shadow_of('A', 'ilen')
+    tipx = sh['bx'] + sh['ux'] * sh['len']
+    check('L2 Ilen\'s own shadow lies across the chasm', tipx < -50, f'tip x {tipx:.1f}')
+    ev('window.__onOwn = 0; window.__airT = null; window.__respT = null;')
+    f0 = ev('window.__falls')
+    down('KeyW')
+    for _ in range(150):
+        ev(f'''(() => {{ const g={S}; g.cameraCtl.yaw = Math.atan2(-(-50 - g.player.pos.x), -(1.5 - g.player.pos.z));
+          if (g.shadows.playerOnShadow && g.shadows.playerOnShadow.kind === 'ilen') window.__onOwn++;
+          if (!g.player.grounded && window.__airT === null && g.player.pos.y < -0.05) window.__airT = g.time; }})()''')
+        adv(1/30)
+        if ev('window.__falls') > f0: break
+    up('KeyW')
+    t_resp = ev(f'{S}.time - window.__airT') if ev('window.__airT !== null') else 99
     adv(0.3)
-    for k, t in (('KeyD', 2), ('KeyA', 3)):
-        down(k); adv(t); up(k); adv(0.1)
-    check('L2 collar alone cannot solve', not ev(f'!!{relic("A")}.lockedOn'), f'err {err_deg("A"):.0f}°')
-    rewind_until('A', f'{relic("A")}.relic.history.atOldest')
-    check('L2 rewind returns to the echo angle', abs(err_deg('A') - (-16)) < 2.0, f'err {err_deg("A"):.1f}°')
-    check('L2 nudge → rune', turn_to_lock('A'))
-    adv(1.0); ok, far = walk_bridge('a'); check('L2 bridge walked', ok, f'{far:.2f}')
+    pos = ev(f'[{S}.player.pos.x, {S}.player.pos.z, {S}.player.grounded]')
+    check('L2 your own shadow cannot be walked (you fall)', ev('window.__falls') == f0 + 1 and ev('window.__onOwn') == 0, f"falls +{ev('window.__falls') - f0}, frames on own shadow {ev('window.__onOwn')}")
+    check('L2 fall respawns at the last safe ground in < 1 s', t_resp < 1.0 and pos[0] > -46 and pos[0] < -40 and pos[2], f'{t_resp:.2f}s at ({pos[0]:.1f}, {pos[1]:.1f})')
+    check('L2 bark after the first fall', ev(f'{S}.world.progress.data.story.includes("bark_2_ownFall")'))
+    # near sconce: its shadow stops over the edge
+    check('L2 kindle the near sconce with E', kindle('near'))
+    adv(0.6)
+    sh = shadow_of('A', 's:near')
+    tipx = sh['bx'] + sh['ux'] * (sh['len'] + 0.35)
+    lm = ev(f'{S}.debug.lightMap(2)')
+    check('L2 the near sconce\'s shadow does not reach the far side', tipx > -47 and not lm['sconces']['near'][0]['crossesAbyss'], f'tip x {tipx:.1f}')
+    ok, pos = walk_shadow('A', 's:near', 1.4, None, 3.0)
+    check('L2 walking off the short shadow drops you', not ok, str(pos))
+    adv(0.5)
+    # far sconce: the long shadow crosses; first prove the burn-out warning + coyote time
+    check('L2 kindle the far sconce', kindle('far'))
+    adv(0.6)
+    check('L2 light map: the far sconce\'s shadow crosses the abyss', lm['sconces']['far'][0]['crossesAbyss'], str(lm['sconces']['far'][0]['abyss']))
+    sh = shadow_of('A', 's:far')
+    ax, az = sh['bx'] + sh['ux'] * 7.5, sh['bz'] + sh['uz'] * 7.5
+    stand_at(ax, az, math.atan2(-sh['ux'], -sh['uz'])); adv(0.3)
+    check('L2 standing on the sconce\'s shadow over the abyss holds you', ev(f'{S}.player.grounded') and ev(f'{S}.player.pos.y') > -0.05 and ev(f'{S}.shadows.playerOnShadow && {S}.shadows.playerOnShadow.kind') == 'sconce')
+    # rule 4 stays true for Ilen too: on the sconce's line, her own shadow points back at it and re-lights it
+    ev(f'{sconce("far")}.burnT = 0.3'); adv(1.6)
+    check('L2 rule 4: your own shadow re-lights the sconce you stand in line with', ev(f'{sconce("far")}.lit') and ev(f'{S}.player.grounded'))
+    # off the line (lantern swung wide) the fire dies: ≥ 0.9 s of warning, then coyote time
+    px, pz = -sh['uz'], sh['ux']
+    stand_at(sh['bx'] + sh['ux'] * 5.9 + px * 0.6, sh['bz'] + sh['uz'] * 5.9 + pz * 0.6, math.atan2(-pz, px)); adv(0.3)
+    check('L2 (still held up near the shadow\'s edge)', ev(f'{S}.player.grounded') and ev(f'{S}.player.pos.y') > -0.05)
+    f0 = ev('window.__falls')
+    ev(f'{sconce("far")}.burnT = 0.6; window.__outT = null;')
+    for _ in range(90):
+        ev(f'(() => {{ const b={sconce("far")}; if (!b.lit && window.__outT === null) window.__outT = {S}.time; }})()')
+        adv(1/30)
+        if ev(f'!{S}.player.grounded'): break
+    warn = ev(f'{S}.time - window.__outT') if ev('window.__outT !== null') else 0
+    check('L2 a dying fire\'s shadow gives ≥ 0.9 s of warning before it drops you', warn >= 0.9, f'{warn:.2f}s')
+    press('Space', 1/30)
+    check('L2 coyote time: a hop still works as the shadow slides away', ev(f'{S}.player.vel.y') > 1.0, f"vy {ev(f'{S}.player.vel.y'):.2f}")
+    adv(1.5)
+    check('L2 …then the fall respawns you on safe ground', ev('window.__falls') == f0 + 1 and ev(f'{S}.player.pos.x') > -46)
+    # cross on the far sconce's shadow
+    kindle('far'); adv(0.6)
+    ok, pos = walk_shadow('A', 's:far', 1.4, None, 1.5)
+    check('L2 crossed the chasm on the far sconce\'s shadow', ok and pos[0] < -50 and pos[2], f'({pos[0]:.1f}, {pos[1]:.1f})')
+    check('L2 bark while standing on a sconce shadow', ev(f'{S}.world.progress.data.story.includes("bark_2_sconceHold")'))
+    shot('12_L2_crossed')
     grab_ember(); adv(1.5); check('L2 complete', level_done(2))
 
     # ===================================================================== L3

@@ -206,6 +206,12 @@ export class AudioManager {
         this._noise(t, 1.0, { gain: 0.35, f0: 2000, f1: 300, q: 1.2, attack: 0.02, rev: 0.5 });
         this._tone(160, t, 1.0, { type: 'sawtooth', gain: 0.05, glideTo: 60, rev: 0.5 });
         break;
+      case 'sfx_shadow_crack':
+        // a dry stone crack: the shadow under you is about to give way
+        this._noise(t, 0.12, { gain: 0.35, f0: 2600, q: 4, rev: 0.3 });
+        this._noise(t + 0.05, 0.5, { gain: 0.2, type: 'lowpass', f0: 500, f1: 120, buf: this.brown, rev: 0.4 });
+        this._tone(140, t, 0.3, { type: 'triangle', gain: 0.12, glideTo: 70, rev: 0.4 });
+        break;
       case 'sfx_fall':
         this._noise(t, 0.7, { gain: 0.45, f0: 1500, f1: 200, q: 1, rev: 0.5 });
         break;

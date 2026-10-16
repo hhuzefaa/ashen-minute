@@ -14,6 +14,8 @@ import { Settings } from './Settings.js';
 import { LightPool } from './LightPool.js';
 import { COLORS, glowTexture } from './Palette.js';
 import { World } from '../world/World.js';
+import { ShadowSystem } from './ShadowSystem.js';
+import { lightMap } from './LightMap.js';
 import { Story } from '../story/Story.js';
 import { emberMesh } from '../objects/EmberPickup.js';
 
@@ -67,7 +69,9 @@ export class Game {
     this.cameraCtl = new CameraController(this.camera);
     this.ui = new UIManager(this);
     this.world = new World(this);
+    this.shadows = new ShadowSystem(this);
     this.story = new Story(this);
+    this.debug = { lightMap: (levelId, opts) => lightMap(this, levelId, opts) };
 
     this.player.onFootstep = () => this.audio.play('step');
     this.player.onFall = () => this.onFall();
@@ -113,6 +117,7 @@ export class Game {
     this.lightPool.setSize(s.get('lights'));
     this.cameraCtl.sensitivity = s.get('sensitivity');
     this.cameraCtl.invertY = s.get('invertY');
+    this.cameraCtl.assistEnabled = s.get('cameraAssist') !== false;
     this.scene.fog.far = s.get('fogFar') || 54;
     this.ui?.el.fps.classList.toggle('hidden', !s.get('showFps'));
     if (recompile) this.scene.traverse((o) => { if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => { m.needsUpdate = true; }); });
@@ -149,6 +154,8 @@ export class Game {
     this.ui.setContinue(this.world.progress.hasSave);
     this.audio.stopAllLoops();
     this.story.scene = null;
+    this.shadows.ilenActive = false;
+    this.shadows.clear();
     this.titleT = 0;
     this.placePlayer(0, 75.5, 0); // park the Keeper on the entrance terrace for the title shot
   }
@@ -156,6 +163,7 @@ export class Game {
   placePlayer(x, z, yaw) {
     this.player.setSpawn(new THREE.Vector3(x, 0, z), yaw);
     this.player.respawn();
+    this.player.setSafe(x, 0, z, yaw);
     this.player.flame = null;
     this.cameraCtl.snap(yaw, 0.3);
   }
@@ -167,6 +175,7 @@ export class Game {
     this.ui.fadeTo(1, 0.5);
     setTimeout(() => {
       this.world.resetAll();
+      this.shadows.clear();
       this.world.progress.data.started = true;
       this.world.progress.save();
       this.story.relicLinesPlayed.clear();
@@ -309,10 +318,14 @@ export class Game {
     this.audio.play('sfx_fall');
     this.ui.fadeTo(1, 0.05);
     setTimeout(() => this.ui.fadeTo(0, 0.5), 80);
-    const cp = this.world.checkpoint;
-    this.player.setSpawn(new THREE.Vector3(cp.x, 0, cp.z), cp.yaw);
-    this.player.flame = null;
-    this.cameraCtl.snap(cp.yaw, 0.3);
+    const pl = this.player;
+    if (pl.hasSafe) pl.setSpawn(pl.lastSafe, pl.lastSafeYaw); // back to the last safe ground
+    else { const cp = this.world.checkpoint; pl.setSpawn(new THREE.Vector3(cp.x, 0, cp.z), cp.yaw); }
+    pl.flame = null;
+    this.falls = (this.falls || 0) + 1;
+    this.lastFallAt = this.time;
+    this.cameraCtl.snap(pl.spawnYaw, 0.3);
+    this.world.activePuzzle?.onFall?.();
   }
 
   respawn() {
@@ -455,10 +468,14 @@ export class Game {
     if (input.wasPressed('Backspace')) { this.restartPuzzle(); return; }
     const p = this.world.activePuzzle;
     const sel = p?.selected;
-    const operating = !!sel && sel.lit && !sel.lockedOn && !sel.busy;
+    const operating = !p?.isLight && !!sel && sel.lit && !sel.lockedOn && !sel.busy; // old dial rooms only
     // 1. player (strafe keys belong to the relic while operating one)
     this.player.update(dt, input, this.cameraCtl.yaw, this.collision, { canMove: true, suppressStrafe: operating, sprint: input.isDown('ShiftLeft', 'ShiftRight') });
-    // 2. camera
+    // 2. light: every fire casts every nearby stone's shadow (Ilen's lantern is a fire)
+    this.shadows.ilenActive = true;
+    this.shadows.update(dt);
+    // 3. camera (assist: near a stone Ilen is shadowing, look down at the floor a little more)
+    this.cameraCtl.assistTarget = this.shadows.ilenNear(this.player.pos, 7) ? 1 : 0;
     this.cameraCtl.update(dt, input, this.player.pos, this.collision, true);
     this.player.keeper.group.visible = !this.cameraCtl.tooClose;
     // 3. world: puzzles, gates, triggers

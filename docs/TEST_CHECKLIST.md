@@ -41,3 +41,28 @@
 - ✅ Draw calls and triangles per area measured (`docs/PERFORMANCE.md`)
 - 👤 Real FPS at Low / Medium / High on the target laptop (Settings → Show FPS)
 - 👤 Two complete runs by a person in a clean browser profile
+
+## Redesign ("You are the light") — status on branch `redesign`
+Rooms I and II now run on the five rules (stones cast shadows away from every fire, Ilen's lantern is a fire, shadows over the abyss are solid, runes wake under a settled shadow, shadows light sconces). Rooms III–X still run the old dial puzzles until Phase 6.
+
+Automated (`tests/playthrough.py`, light map `window.__ashen.debug.lightMap(id)`):
+- ✅ Rule 1 truthfulness check: no decorative brazier within 9 m of a stone
+- ✅ I: the shadow follows the lantern (yaw error < 2°); stepping back lengthens it; too short near the stone; walking past the zone doesn't trigger (0.4 s settle); standing in the zone wakes the rune; the stone glows gold; bridge walked on foot
+- ✅ II: Ilen's own shadow lies across the chasm but can't be walked (fall, never on it); respawn at last safe ground in < 1 s; near sconce's shadow stops at the edge and walking off it drops you; far sconce's shadow crosses (light map + on foot); ≥ 0.9 s warning when a fire dies under you; coyote hop; rule 4 (your shadow re-lights a sconce on its line)
+
+## Human playtest 8.3 (run after Phase 3, and again before freeze)
+Setup: `npm run build && npx vite preview`, open the URL, **New Game**, press Esc to skip the opening. Three people, one at a time; play silently, **no hints from the watcher**. Stop each person after Room II (the Room II far door) — Rooms III+ are still the old design.
+
+Watch and note for each player:
+1. Seconds until they show they understand "I am the light" in Room I (they walk around the stone *on purpose* to swing the shadow). Target: < 60 s.
+2. Did they step back to lengthen the shadow, or did they wander until it happened?
+3. Room II: did they try to walk onto their own shadow? What did they do after falling?
+4. Which sconce did they kindle first? How long until they tried the second one?
+5. Did anyone circle the stone just to watch the shadow (good sign)?
+6. Any place they were stuck > 2 minutes, any moment they were confused by the camera, any shadow they couldn't see.
+
+| Tester | Room I "I'm the light" (s) | Room I solved (s) | Tried own shadow? | Room II solved (s) | Stuck > 2 min where | Notes |
+|---|---|---|---|---|---|---|
+| 1 | | | | | | |
+| 2 | | | | | | |
+| 3 | | | | | | |

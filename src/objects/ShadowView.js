@@ -10,8 +10,8 @@ function geos() {
   if (BODY) return;
   BODY = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);             // x ∈ ±0.5, z ∈ ±0.5
   TIP = new THREE.CircleGeometry(0.5, 16, Math.PI, Math.PI).rotateX(-Math.PI / 2); // half-disc toward −z
-  SIDE = new THREE.PlaneGeometry(0.07, 1).rotateX(-Math.PI / 2);
-  TIPRIM = new THREE.RingGeometry(0.465, 0.535, 16, 1, Math.PI, Math.PI).rotateX(-Math.PI / 2);
+  SIDE = new THREE.PlaneGeometry(0.09, 1).rotateX(-Math.PI / 2);
+  TIPRIM = new THREE.RingGeometry(0.455, 0.545, 16, 1, Math.PI, Math.PI).rotateX(-Math.PI / 2);
 }
 
 export class ShadowView {

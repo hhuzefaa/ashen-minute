@@ -203,12 +203,16 @@ export const ZONES = [
 // The ten levels. Relic/rune fields are documented in docs/LEVEL_DESIGN.md.
 export const LEVELS = [
   {
-    id: 1, numeral: 'I', name: 'The Threshold', rect: [-10, 10, 33, 62],
+    id: 1, numeral: 'I', name: 'The Threshold', rect: [-10, 10, 33, 62], v2: true,
     spawn: [0, 58, 0], quiet: true,
-    objective: 'Light the relic. Turn it until its shadow touches the golden rune.',
-    relics: [{ id: 'A', at: [-2.5, 52], aim: 'a', startDeg: 35, speed: 50 }],
-    runes: [{ id: 'a', at: [2.5, 38.6], relics: ['A'], tol: 8, bridge: { axis: 'z', from: 47.6, to: 42.9 } }],
+    objective: 'Cross into the temple.',
+    // Introduce: walking swings the stone's shadow. Twist: it falls short of the rune until you
+    // step BACK (a farther fire throws a longer shadow). Valid lantern zone: 4.1–9 m behind the
+    // stone on the line rune→stone (all on the near platform).
+    stones: [{ id: 'A', at: [-1, 49], faceDeg: -15 }],
+    runes: [{ id: 'a', at: [1.5, 39.5], stones: ['A'], bridge: { from: [0, 47.6], to: [0, 42.9] } }],
     ember: [-4, 36.4],
+    barks: { firstShadow: ['MARROW', 'Fire first, child. Where the fire stands, the shadow falls the other way.'] },
     onComplete: { gates: ['g_L1', 'g_hub_w'] },
     build(ctx) {
       platform(ctx, { x0: -9, x1: 9, z0: 47, z1: 62 });
@@ -222,12 +226,17 @@ export const LEVELS = [
     },
   },
   {
-    id: 2, numeral: 'II', name: 'The Echo Court', rect: [-61, -33.5, -13, 17],
+    id: 2, numeral: 'II', name: 'The Loose Shadow', rect: [-61, -33.5, -13, 17], v2: true,
     spawn: [-36, 0, Math.PI / 2],
-    objective: 'The relic was wrenched from its angle. Find what it remembers.',
-    relics: [{ id: 'A', at: [-40, 3.5], aim: 'a', startDeg: -16, mode: 'collar', collar: 15, speed: 26, echo: true, jolt: [{ toDeg: -150, dur: 1.5 }] }],
-    runes: [{ id: 'a', at: [-55.5, -4.5], relics: ['A'], tol: 6, bridge: { axis: 'x', from: -45.4, to: -50.6 } }],
+    objective: 'Reach the far door.',
+    // Introduce: a shadow over the chasm is solid — but your own swings away as you step on it.
+    // Twist: kindle a sconce. The near one's shadow (d≈1.9 m → 6.1 m) stops over the abyss; the
+    // far one's (d≈7.1 m → 14.4 m) reaches the far platform diagonally and holds for 20 s.
+    stones: [{ id: 'A', at: [-42, 0], faceDeg: 90 }],
+    runes: [],
+    sconces: [{ id: 'near', at: [-40.8, -1.5], burn: 20 }, { id: 'far', at: [-36.5, 4.5], burn: 20 }],
     ember: [-57.6, -9.6],
+    barks: { ownFall: ['ILEN', 'I can’t stand where the light has to be.'], sconceHold: ['MARROW', 'A Keeper never carries every fire herself.'] },
     onComplete: { gates: ['g_L2'] },
     build(ctx) {
       platform(ctx, { x0: -46, x1: -34, z0: -12, z1: 12 });
@@ -242,7 +251,6 @@ export const LEVELS = [
       platform(ctx, { x0: -42, x1: -38, z0: 11.5, z1: 16 });
       wallZ(ctx, -42.45, 12.9, 16.9, 4); wallZ(ctx, -37.55, 12.9, 16.9, 4); wallX(ctx, 16.45, -42.9, -37.1, 4);
       read(ctx, 'S2', -40, 15.6, Math.PI);
-      read(ctx, 'L2_echo', -36.6, 8.6, -2.2);
       pillar(ctx, -44.5, 10.5, { h: 7 }); pillar(ctx, -44.5, -10.5, { h: 7, broken: true });
       pillar(ctx, -51.5, 10.5, { h: 7, broken: true }); pillar(ctx, -51.5, -10.5, { h: 7 });
       brazier(ctx, -35.5, 10.5); brazier(ctx, -35.5, -10.5); brazier(ctx, -58.5, 10.5);

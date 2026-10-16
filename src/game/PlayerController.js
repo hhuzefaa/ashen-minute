@@ -10,6 +10,10 @@ const JUMP_V = 5.6;
 const RADIUS = 0.34;
 const HEIGHT = 1.7;
 const STEP = 0.4;
+const COYOTE = 0.12;     // s after leaving ground (or a shadow sliding away) when a hop still works
+const JUMP_BUFFER = 0.12; // s a hop pressed just before landing is remembered
+const SAFE_EVERY = 0.2;   // s between "last safe ground" samples
+const SAFE_PROBE = 0.8;   // m of floor required on all four sides of a safe spot
 
 export class PlayerController {
   constructor(scene) {
@@ -21,7 +25,13 @@ export class PlayerController {
     this.grounded = false;
     this.spawn = new THREE.Vector3();
     this.spawnYaw = 0;
-    this.killY = -12;
+    this.killY = -7;   // ≈0.8 s of falling, then a quick fade back to the last safe ground
+    this.coyote = 0;
+    this.jumpBuffer = 0;
+    this.lastSafe = new THREE.Vector3();
+    this.lastSafeYaw = 0;
+    this.hasSafe = false;
+    this.safeT = 0;
     this.lastStepSign = 0;
     this.onFootstep = null;
     this.onFall = null;
@@ -33,7 +43,12 @@ export class PlayerController {
     this.spawnYaw = yaw;
   }
 
+  /** Where a fall puts the Keeper back: the last safe ground if known, else the spawn. */
+  setSafe(x, y, z, yaw) { this.lastSafe.set(x, y, z); this.lastSafeYaw = yaw; this.hasSafe = true; this.safeT = 0; }
+  clearSafe() { this.hasSafe = false; }
+
   respawn() {
+    this.coyote = 0; this.jumpBuffer = 0;
     this.pos.copy(this.spawn);
     this.vel.set(0, 0, 0);
     this.facing = this.spawnYaw;
@@ -67,9 +82,15 @@ export class PlayerController {
     this.vel.x += (tx - this.vel.x) * k * airK;
     this.vel.z += (tz - this.vel.z) * k * airK;
 
-    if (opts.canMove && this.grounded && input.wasPressed('Space')) {
+    // hop: coyote time + jump buffer
+    if (this.grounded) this.coyote = COYOTE; else this.coyote = Math.max(0, this.coyote - dt);
+    if (opts.canMove && input.wasPressed('Space')) this.jumpBuffer = JUMP_BUFFER;
+    else this.jumpBuffer = Math.max(0, this.jumpBuffer - dt);
+    if (opts.canMove && this.jumpBuffer > 0 && this.coyote > 0 && this.vel.y <= 0.01) {
       this.vel.y = JUMP_V;
       this.grounded = false;
+      this.coyote = 0;
+      this.jumpBuffer = 0;
     }
     this.vel.y -= GRAVITY * dt;
     if (this.vel.y < -30) this.vel.y = -30;
@@ -92,6 +113,19 @@ export class PlayerController {
       this.vel.y = 0;
     } else {
       this.grounded = false;
+    }
+
+    // last safe ground: solid floor with floor 0.8 m away on every side
+    if (this.grounded && opts.canMove !== false) {
+      this.safeT += dt;
+      if (this.safeT >= SAFE_EVERY) {
+        this.safeT = 0;
+        const x = this.pos.x, z = this.pos.z, y = this.pos.y;
+        if (world.standingOn(x, z, y, 'floor') && world.standingOn(x + SAFE_PROBE, z, y, 'floor') && world.standingOn(x - SAFE_PROBE, z, y, 'floor')
+          && world.standingOn(x, z + SAFE_PROBE, y, 'floor') && world.standingOn(x, z - SAFE_PROBE, y, 'floor')) {
+          this.lastSafe.set(x, y, z); this.lastSafeYaw = this.facing; this.hasSafe = true;
+        }
+      }
     }
 
     // fall recovery

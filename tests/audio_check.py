@@ -2,7 +2,7 @@
 import json, sys
 from playwright.sync_api import sync_playwright
 NAMES = ['sfx_relic_ignite','sfx_shadow_align','sfx_bridge_form','sfx_bridge_warning','tick','sfx_bridge_fade','sfx_ember_collect',
-         'sfx_heart_ignite','sfx_ui_click','sfx_no_memory','sfx_collar_stop','sfx_jolt','sfx_fall','step','sfx_door','whoosh']
+         'sfx_heart_ignite','sfx_ui_click','sfx_no_memory','sfx_collar_stop','sfx_jolt','sfx_fall','step','sfx_door','whoosh','sfx_shadow_crack']
 LOOPS = ['amb_fire_crackle','sfx_time_rewind','near_tone','__ambience']
 JS = '''async ([name, isLoop]) => {
   const AM = window.__ashen.audio.constructor;

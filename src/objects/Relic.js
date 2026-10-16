@@ -27,6 +27,8 @@ export class Relic {
     this.litAmount = 0;
     this.history = new TimeRecorder(20, memorySeconds);
     this.time = 0;
+    this.stone = false;     // gnomon-stone mode (light puzzles): never lit, core glows gold on a rune
+    this.glow = 0;
 
     // --- pedestal ---
     const ped = new THREE.Group();
@@ -177,6 +179,21 @@ export class Relic {
     this.update(0);
   }
 
+  /** Gnomon stone: dark ember core that glows gold while one of its shadows rests on a valid rune. */
+  updateStone(dt) {
+    this.litAmount += (this.glow - this.litAmount) * Math.min(1, dt / 0.15);
+    if (dt === 0) this.litAmount = this.glow;
+    const g = this.litAmount;
+    const flicker = 0.9 + Math.sin(this.time * 11) * 0.1;
+    this.coreMat.emissive.set(COLORS.target);
+    this.coreMat.emissiveIntensity = g * 4 * flicker;
+    this.runeMat.color.set(COLORS.target).multiplyScalar(0.06 + g * 2 * flicker);
+    this.light.color.set(COLORS.target);
+    this.light.intensity = g * 4;
+    this.core.rotation.y += dt * (0.3 + g * 2);
+    this.collar.visible = false;
+  }
+
   setCollar(centerYaw, halfRange, visible) {
     this.collarPivot.rotation.y = centerYaw - halfRange + Math.PI / 2;
     // RingGeometry theta runs CCW from +X in its local XY plane; after the -PI/2 X rotation it maps to world XZ.
@@ -187,6 +204,7 @@ export class Relic {
 
   update(dt) {
     this.time += dt;
+    if (this.stone) { this.updateStone(dt); return; }
     const target = this.lit ? 1 : 0;
     this.litAmount += (target - this.litAmount) * Math.min(1, dt / 0.12);
     if (dt === 0) this.litAmount = target;

@@ -7,7 +7,7 @@ export const PRESETS = {
   high: { renderScale: 1.5, shadows: true, shadowRes: 2048, bloom: true, particles: 1.0, lights: 6, fogFar: 62 },
 };
 
-const DEFAULTS = { preset: 'medium', ...PRESETS.medium, sensitivity: 1.0, invertY: false, showFps: false };
+const DEFAULTS = { preset: 'medium', ...PRESETS.medium, sensitivity: 1.0, invertY: false, showFps: false, cameraAssist: true };
 
 export class Settings {
   constructor() {

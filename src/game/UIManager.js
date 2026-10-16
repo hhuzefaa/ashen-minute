@@ -150,6 +150,7 @@ export class UIManager {
 
   /** p = active puzzle (or null when walking corridors) */
   updateHUD(p, player, extraPrompt, objective) {
+    if (p?.isLight) { this.updateLightHUD(p, player, extraPrompt, objective); return; }
     let pr = null, sub = '';
     if (p) { pr = this.promptFor(p); sub = this.subFor(p); }
     if (!pr && extraPrompt) pr = extraPrompt;
@@ -181,6 +182,35 @@ export class UIManager {
     this.el.fire.classList.toggle('active', anyLit || !!player.flame);
     this.el.shadow.classList.toggle('active', !!p && ([...p.runes.values()].some((r) => r.lit) || (rs && p.alignmentOf(rs) > 0.6) || p.focus));
     this.el.time.classList.toggle('active', rewinding);
+  }
+
+  /** HUD for rooms built on the five rules: no turning, no memory bar, no carried flame. */
+  updateLightHUD(p, player, extraPrompt, objective) {
+    let pr = null;
+    if (p.flash) pr = { text: p.flash.text, cls: p.flash.cls };
+    else if (p.prompt0) {
+      const t = p.prompt0;
+      if (t.type === 'sconce') pr = t.b.lit ? { text: LIGHT_UI.rekindle, cls: 'fire' } : { text: LIGHT_UI.kindle, cls: 'fire' };
+      else if (t.type === 'lever') pr = { text: LIGHT_UI.lever, cls: 'gold' };
+      else if (t.type === 'read') pr = { text: LIGHT_UI.read, cls: 'cyan' };
+    }
+    if (!pr && extraPrompt) pr = extraPrompt;
+    const text = pr ? pr.text : '';
+    if (text !== this.lastPrompt) { this.el.prompt.textContent = text; this.lastPrompt = text; }
+    this.el.prompt.className = pr ? pr.cls || '' : '';
+    if (this.el.sub.textContent !== '') this.el.sub.textContent = '';
+    if (this.el.objective.textContent !== objective) this.el.objective.textContent = objective;
+    this.el.timer.classList.add('hidden');
+    this.el.flame.classList.add('hidden');
+    this.el.memory.classList.add('hidden');
+    this.el.vRewind.classList.remove('on');
+    this.el.vWarn.classList.remove('on');
+    let anyLit = false, onRune = false;
+    for (const b of p.sconces) if (b.lit) { anyLit = true; break; }
+    for (const ru of p.runes.values()) if (ru.covered || ru.lit) { onRune = true; break; }
+    this.el.fire.classList.toggle('active', anyLit);
+    this.el.shadow.classList.toggle('active', onRune || !!this.game.shadows.playerOnShadow);
+    this.el.time.classList.toggle('active', false);
   }
 
   promptFor(p) {
@@ -272,6 +302,7 @@ export class UIManager {
   }
 }
 
+const LIGHT_UI = { kindle: '[E] KINDLE THE SCONCE', rekindle: '[E] FEED THE SCONCE', lever: '[E] SLIDE THE STONE', read: '[E] READ' };
 const PROMPTS_UI = {
   ignite: '[E] IGNITE RELIC', kindle: '[E] KINDLE THE RELIC', cold: 'THIS RELIC IS COLD — IT NEEDS A FLAME',
   coldRelay: 'THIS RELIC WAITS FOR ANOTHER’S FIRE', takeFlame: '[E] TAKE THE FLAME', lever: '[E] SLIDE THE RELIC',

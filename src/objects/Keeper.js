@@ -102,7 +102,7 @@ export class Keeper {
     this.lanternCore = new THREE.Mesh(new THREE.OctahedronGeometry(0.045, 0), this.lanternCoreMat);
     this.lanternCore.position.y = -0.24;
     this.lanternPivot.add(this.lanternCore);
-    this.lanternLight = new THREE.PointLight(COLORS.fire, 0.8, 5, 1.8);
+    this.lanternLight = new THREE.PointLight(COLORS.fire, 10, 12, 1.4); // Ilen is the light: a real pool on the floor
     this.lanternLight.position.y = -0.24;
     this.lanternPivot.add(this.lanternLight);
     this.setEmberLevel(0);
@@ -111,7 +111,7 @@ export class Keeper {
   /** Lantern brightens as embers are restored (0..3). */
   setEmberLevel(n) {
     this.emberLevel = n;
-    this.lanternBase = 0.7 + n * 0.75;
+    this.lanternBase = 10 + n * 1.2;
     this.lanternCoreMat.color.set(COLORS.fire).multiplyScalar(1.4 + n * 0.9);
   }
 

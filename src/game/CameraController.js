@@ -13,6 +13,10 @@ const MIN_PITCH = -0.55;
 const MAX_PITCH = 1.15;
 const MIN_DIST = 0.3;
 const BASE_SENS = 0.0022;
+const ASSIST_PITCH = 0.62;  // camera assist: minimum pitch near a stone Ilen is shadowing
+const ASSIST_ARM = 6.0;     // …and arm length, so the shadow on the floor is in view
+const ASSIST_TIME = 0.6;    // s to ease in / out
+const PROBE_OFFS = [[0, 0], [0.28, 0], [-0.28, 0], [0, 0.22], [0, -0.22]];
 
 export class CameraController {
   constructor(camera) {
@@ -24,6 +28,9 @@ export class CameraController {
     this.sensitivity = 1;
     this.invertY = false;
     this.override = null;   // { pos, look, speed } — cinematic shots only
+    this.assistEnabled = true;
+    this.assistTarget = 0;  // Game sets 1 near a stone whose shadow Ilen is casting
+    this.assistK = 0;
     this.pivot = new THREE.Vector3();
     this.smoothPos = new THREE.Vector3();
     this.lookAt = new THREE.Vector3();
@@ -73,6 +80,15 @@ export class CameraController {
       return;
     }
 
+    // camera assist (never takes yaw): raise the minimum pitch and lengthen the arm near a stone
+    const at = this.assistEnabled ? this.assistTarget : 0;
+    this.assistK += Math.sign(at - this.assistK) * Math.min(Math.abs(at - this.assistK), dt / ASSIST_TIME);
+    if (this.assistK > 0) {
+      const e = this.assistK * this.assistK * (3 - 2 * this.assistK);
+      const minP = MIN_PITCH + (ASSIST_PITCH - MIN_PITCH) * e;
+      if (this.pitch < minP) this.pitch = minP;
+    }
+
     // pivot follows the Keeper with a short lag (vertical lag slightly longer to soften hops)
     const tx = playerPos.x, ty = playerPos.y + PIVOT_H, tz = playerPos.z;
     if (this.first) this.pivot.set(tx, ty, tz);
@@ -89,10 +105,10 @@ export class CameraController {
     const up = this._up.crossVectors(back, right).normalize();
 
     // collision probe: centre + 4 offset rays from the pivot toward the desired arm end
-    const L = this.armLength;
+    const ke = this.assistK * this.assistK * (3 - 2 * this.assistK);
+    const L = this.armLength + Math.max(0, ASSIST_ARM - this.armLength) * ke;
     let frac = 1;
-    const offs = [[0, 0], [0.28, 0], [-0.28, 0], [0, 0.22], [0, -0.22]];
-    for (const [ox, oy] of offs) {
+    for (const [ox, oy] of PROBE_OFFS) {
       const a = this._a.copy(this.pivot).addScaledVector(right, ox * 0.4).addScaledVector(up, oy * 0.4);
       const b = this._b.copy(this.pivot).addScaledVector(right, SHOULDER + ox).addScaledVector(up, oy).addScaledVector(back, L);
       const f = world.raycastFraction(a, b, CAMERA_BLOCKERS);
