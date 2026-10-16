@@ -15,20 +15,23 @@ The competition rules say:
 - Move the mouse slowly and smoothly. Stop briefly on key moments: ignition, the bridge forming, the rewind, the Room 3 timer and the Heart Ember.
 - For the theme callouts, hold **Q** (Focus) for a moment while recording so the shadow line and memory trail are visible.
 
-## Edit timeline (based on design bible §16)
+## Edit timeline
 
 | Time | Shot (✱ = real gameplay) | On-screen text |
 |---|---|---|
-| 0:00–0:18 | Teaser: slow drift across the cold Room 1 title view, the unlit relic, falling ash, then the title card | "The temple remembers what the world has forgotten." → **ASHEN MINUTES** |
-| 0:18–0:45 ✱ | Walk in from spawn; the **[E] IGNITE RELIC** prompt appears; ignition flare; braziers catch | **FIRE** wakes the relic |
-| 0:45–1:15 ✱ | Turn the relic with A/D; the shadow sweeps; "THE SHADOW IS NEAR"; the bridge forms; walk across it; collect ember 1 | **SHADOW** becomes the path |
-| 1:15–1:42 ✱ | Room 2: ignition jolt, nudging stopped by the collar, then hold R: cyan vignette, ghost, the relic sweeps back to the echo; nudge, align, cross | **TIME** remembers the angle |
-| 1:42–2:12 ✱ | Room 3: the zig-zag rewind; align; the timer ring; stand on the span to show the pause; let one span fade, then rewind and re-align; cross | Fire · Shadow · Time, together |
-| 2:12–2:35 ✱ | Collect ember 3; the three embers converge; the Heart Ember ignites; the seal lights; the door sinks; "THE TEMPLE REMEMBERS"; victory screen | |
-| 2:35–2:52 | Theme summary over gameplay b-roll: three short captions with the HUD theme icons | FIRE ignites · SHADOW builds · TIME corrects |
-| 2:52–3:00 | End card: title, your name, "Three.js · all art and sound made in code" | |
+| 0:00–0:20 | Teaser: in-game opening cutscene (camera over the entrance, Ilen's lines about Sera) and the title card | "The temple remembers what the world has forgotten." |
+| 0:20–0:45 ✱ | I · Threshold: walk in, **E** to ignite, braziers catch, turn the relic, the shadow becomes a bridge, cross | **FIRE** wakes the relic · **SHADOW** becomes the path |
+| 0:45–1:10 ✱ | II · Echo Court: ignition wrenches the relic, the collar stops your nudges, hold **R** (cyan rewind, memory bar), back to the echo, align | **TIME** remembers the angle |
+| 1:10–1:25 ✱ | Walk through the opened gate and gallery into the Sanctuary (the scale shot); a brazier lights | One temple, ten embers |
+| 1:25–1:45 ✱ | IV · rail relic: the shadow falls short, slide it with the lever, align · VI · Relay: fire runs along a shadow through the wall | Shadows carry fire |
+| 1:45–2:05 ✱ | VII · Crossroads: take the flame (timer ring), a decoy is rejected in red, the eye relic opens the door | Choose your flame |
+| 2:05–2:25 ✱ | VIII / IX: timed span with countdown, stand on it (timer pauses), cross; the relay chain | All three, together |
+| 2:25–2:42 ✱ | X: three sockets held, the final span, the Heart burns backwards, ash rises | |
+| 2:42–3:00 | Ending cards + title: "The temple remembers, so that we may forget." | |
 
-Gameplay total: 0:18–2:35 = **2:17** (more than 2:00). Teaser and end card: 0:43.
+Gameplay total: about 2:05 (more than 2:00). Teaser plus ending: about 0:55.
+
+**Tip for recording late levels:** finish a full run once and keep that browser profile. Your save lets you **Continue** from any checkpoint, and every opened gate stays open, so you can re-record any level's area. To replay a puzzle from the start, stand in its room and press **Backspace**.
 
 ## Before uploading
 

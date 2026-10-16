@@ -428,10 +428,10 @@ export function statue(ctx, x, z, yaw = 0, scale = 1, broken = true) {
 let shaftMat = null;
 /** Cheap volumetric light shaft (additive cone, no lighting cost). */
 export function lightShaft(ctx, x, z, h = 14, r = 2.2, color = 0x9fb5d8, opacity = 0.07) {
-  if (!shaftMat) shaftMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: true });
+  if (!shaftMat) shaftMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false });
   const m = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.6, r, h, 12, 1, true), shaftMat.clone());
-  m.material.color.set(color).multiplyScalar(opacity * 10);
-  m.material.opacity = 0.1;
+  m.material.color.set(color).multiplyScalar(opacity * 2.2);
+  m.material.opacity = 1;
   m.position.set(x, h / 2, z);
   m.rotation.z = 0.12;
   m.renderOrder = 4;

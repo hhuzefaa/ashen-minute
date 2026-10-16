@@ -184,7 +184,12 @@ export class Puzzle {
         const y = rs.relic.history.stepRewind(dt, rs.spec.rewindSpeed ?? 1.4);
         if (y !== null) rs.relic.yaw = y;
         if (Math.random() < 0.6) this.game.effects.timeSpark(rs.relic.flamePoint, 1);
-        if (rs.relic.history.atOldest && !rs.oldestWarned) { rs.oldestWarned = true; audio.play('sfx_collar_stop'); }
+        if (rs.relic.history.atOldest && !rs.oldestWarned) {
+          rs.oldestWarned = true;
+          audio.play('sfx_collar_stop');
+          // if the answer lies in the middle of the memory and was passed, say how to replay it
+          if (rs.spec.rewindSolves === false && this.bestCloseness(rs) < 0.5) this.showFlash('THE MEMORY ENDS — [BACKSPACE] TO RELIVE IT', 'cyan', 3);
+        }
       }
       return;
     }

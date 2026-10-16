@@ -371,6 +371,19 @@ with sync_playwright() as pw:
     check('L8 nudge → timed span', turn_to_lock('B'))
     adv(1.0)
     check('L8 span timer running', ev(f'!!{P}.hudTimer'))
+    # stand on the span: the timer must pause
+    ev(f'''(() => {{ const g={S}, br={P}.runes.get("b").bridge, m=br.group.position; g.player.pos.set(m.x, m.y, m.z); g.player.vel.set(0,0,0); }})()''')
+    adv(0.5); t_a = ev(f'{P}.hudTimer.t'); adv(2.0); t_b = ev(f'{P}.hudTimer.t')
+    check('L8 timer pauses while standing on the span', abs(t_a - t_b) < 0.05, f'{t_a:.2f} → {t_b:.2f}')
+    # step off and let it expire: the span must fade (collider off) and the relic slip
+    stand_behind('B'); adv(10)
+    check('L8 expired span fades and is not walkable', ev(f'{P}.runes.get("b").bridge.state === "HIDDEN" && !{P}.runes.get("b").bridge.collider.enabled'))
+    wait_jolt('B')
+    check('L8 relic slipped off the rune', not ev(f'!!{relic("B")}.lockedOn'))
+    rewind_until('B', f'!!{relic("B")}.lockedOn || {relic("B")}.relic.history.atOldest')
+    if not ev(f'!!{relic("B")}.lockedOn'): turn_to_lock('B')
+    check('L8 rewind restores the span after the slip', ev(f'!!{relic("B")}.lockedOn'))
+    adv(1.0)
     ok, far = walk_bridge('b'); check('L8 timed span crossed', ok, f'{far:.2f}')
     grab_ember(); adv(1.5); check('L8 complete', level_done(8))
 

@@ -1,4 +1,4 @@
-import { platform, wall, pillar, brazier, rubble, inscription, backdrop, wallX, wallZ, rail, statue, lightShaft } from '../objects/Environment.js';
+import { platform, pillar, brazier, rubble, inscription, backdrop, wallX, wallZ, statue } from '../objects/Environment.js';
 import { COLORS } from '../game/Palette.js';
 
 // ===============================================================================================
@@ -62,7 +62,6 @@ export const ZONES = [
       wallZ(ctx, 7.45, 62, 78, 1.4, [], 0, { ruin: 0.6 });
       statue(ctx, -4.6, 73.5, 0, 0.75, true);
       statue(ctx, 4.6, 73.5, 0, 0.75, false);
-      lightShaft(ctx, 0, 70, 16, 3);
       // Gallery between Threshold and the hub (+ optional alcove S1)
       platform(ctx, { x0: -3, x1: 3, z0: 21.5, z1: 33.6 });
       wallZ(ctx, -3.45, 21.5, 33.1, 6);
@@ -72,7 +71,6 @@ export const ZONES = [
       wallX(ctx, 26.05, 3.9, 7.9, 4);
       wallX(ctx, 30.95, 3.9, 7.9, 4);
       read(ctx, 'S1', 6.6, 28.5, -Math.PI / 2, COLORS.target);
-      lightShaft(ctx, 0, 27, 12, 1.6, 0x9fb5d8, 0.05);
       backdrop(ctx, { cx: 0, cz: 55, radius: 40, seed: 5 });
     },
   },
@@ -98,9 +96,6 @@ export const ZONES = [
       // ten braziers: one wakes for every level restored (environmental progress)
       ctx.progressBraziers = [[-8, 19.5], [8, 19.5], [-19.5, 7], [-19.5, -7], [-8, -19.5], [8, -19.5], [19.5, -7], [19.5, 7], [-14, 16], [14, 16]]
         .map(([x, z]) => brazier(ctx, x, z));
-      lightShaft(ctx, 0, 0, 22, 5, 0x9fb5d8, 0.06);
-      lightShaft(ctx, -16, 0, 14, 2, 0x9fb5d8, 0.04);
-      lightShaft(ctx, 16, 0, 14, 2, 0x9fb5d8, 0.04);
       backdrop(ctx, { cx: 0, cz: 0, radius: 60, seed: 77 });
     },
   },

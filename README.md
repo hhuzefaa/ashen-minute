@@ -2,42 +2,49 @@
 
 *The temple remembers what the world has forgotten.*
 
-A short 3D third-person puzzle game about a hooded Keeper relighting a ruined temple. Built in Three.js for a game-jam with the themes **Fire, Shadow and Time**. It takes about 5–8 minutes to finish.
+A third-person puzzle adventure in **one connected ancient temple**, built in Three.js for a game jam with the themes **Fire, Shadow and Time**. You play Ilen, a former apprentice Keeper, who returns to relight the Heart Ember while the city below forgets itself. There are ten levels in a persistent, explorable world, with in-engine cutscenes and a complete story. A run takes about 30–50 minutes.
 
-![Room 1 — the shadow becomes a bridge](docs/screenshots/room1_bridge.png)
+![The Threshold: a shadow becomes a bridge](docs/screenshots/L1_bridge.png)
 
-## How the three themes work together
+## How the themes work together
 
-Each relic in the temple is a floating stone **sundial**. Its parts make up a single puzzle that chains the three themes:
+Every relic is a floating stone **sundial**.
 
-| Theme | In the game |
+| Theme | Mechanic |
 |---|---|
-| **Fire** | You press **E** to ignite the relic's ember core. Until it burns there is no shadow, no target and no way forward. The braziers around the room catch fire from the relic. Each ember you restore warms the Keeper's lantern, the light and the music. |
-| **Shadow** | The burning relic casts its sundial gnomon's **detached shadow** across the floor and over the abyss. You turn the relic until the shadow's tip lands on a golden rune. When it does, the shadow becomes a **solid bridge** that you walk across. |
-| **Time** | You hold **R** to **rewind the relic's own recent memory** (its rotation history). This affects only the relic, never the world or the player. In later rooms the useful angle survives only in that memory. |
+| **Fire** | Press **E** to ignite a relic. *Cold* relics must be **kindled** with a flame you carry in your lantern from an eternal hearth, and it burns down in 10–14 seconds. Fire can also **relay** along a shadow to light another relic. |
+| **Shadow** | A lit relic casts its gnomon's detached shadow. When the shadow lands on a golden rune, it hardens into a **bridge**, opens a **gate**, **relays** fire onward, or fills a **socket** of the Heart. A shadow that lands on the wrong sign is rejected. |
+| **Time** | Hold **R** to **rewind the relic's own recorded memory**. Relics are jolted on ignition and their stone collars only allow small nudges, so the right angle exists only in their past. Bridges can also be **timed**. |
 
-The dependency always runs the same way: **Fire** reveals the shadow, **Shadow** forms the route, and **Time** corrects the relic so the route can form.
+Fire reveals the shadow, the shadow forms the route, and time recovers the angle that makes the route possible. The world also reacts as you progress: each restored ember lights one brazier in the Sanctuary and warms the temple's light, fog and music.
 
-## The three rooms
+## The temple
 
-1. **The First Ember.** Ignite the relic, turn it until its shadow meets the rune, and cross the bridge. This room teaches the core loop.
-2. **The Bent Memory.** Igniting the relic wrenches it far off course, and its stone collar only lets you nudge it ±15°. A cyan echo shows the angle it remembers. Rewind back to the echo, then fine-tune.
-3. **The Ashen Span.** The relic is thrown back and forth, so its memory zig-zags. Rewind it, align it to within 5°, and cross before the bridge fades after 8 seconds. The timer pauses while you stand on the span. If the span fades, the relic slips again, and you can rewind it back into place.
-4. **Finale.** The three embers converge on the Heart Ember, the floor seal completes and the sealed arch opens.
+![The Sanctuary of Minutes: the Heart Ember on its island](docs/screenshots/hub_ring.png)
+
+- **Entrance → I The Threshold → gallery → the Sanctuary (hub).**
+- **West wing:** II The Echo Court → III The Twin Flames → IV The Measured Shadow, then a shortcut back to the hub.
+- **North wing:** V The Bent Memory → VI The Relay → VII The Crossroads, then a shortcut back.
+- **East wing:** VIII The Clockwork Span → IX The Mirror Hall, then a shortcut back.
+- **X The Heart of Minutes** happens in the Sanctuary itself, where three ring relics must hold their shadows on the Heart at the same time.
+
+Every gate is a real door with collision. Opened gates stay open, and progress is saved automatically (**Continue** on the title screen). There are three optional inscriptions to find.
+
+Full puzzle specification: [`docs/LEVEL_DESIGN.md`](docs/LEVEL_DESIGN.md) · Story: [`docs/STORY.md`](docs/STORY.md)
 
 ## Controls
 
 | Input | Action |
 |---|---|
-| W A S D | Move (relative to the camera) |
-| Mouse | Look (click the game to capture the mouse; dragging also works) |
-| E | Ignite the relic |
-| A / D or ← / → (beside a lit relic) | Turn or nudge the relic |
+| W A S D | Move relative to the camera · **Shift** to run |
+| Mouse / wheel | Orbit the camera / camera distance (click the game to capture the mouse) |
+| E | Ignite · take flame · kindle · slide a rail relic (at its lever) · read inscriptions |
+| A D or ← → beside a lit relic | Turn or nudge the relic |
 | Hold R | Rewind the relic's memory |
-| Hold Q | Focus: shows the shadow line and the relic's recent path |
-| Space | Small hop (never required) |
-| Backspace | Restart the room (embers you've earned are kept) |
-| Esc | Pause |
+| Hold Q | Focus: shadow line and memory trail |
+| Space | Hop · advance dialogue |
+| Backspace | Restart the current puzzle (gates stay open) |
+| Esc | Pause · skip cutscene |
 | M | Mute |
 
 ## Running it
@@ -46,69 +53,44 @@ You need Node.js 18 or newer.
 
 ```bash
 npm install
-npm run dev        # open the printed http://localhost:5173 link
-npm run build      # production build in dist/
-npm run preview    # serve the production build
+npm run dev        # open http://localhost:5173
+npm run build      # production build in dist/ (static, deployable anywhere)
 ```
 
-Optional URL flags:
-- `?lowfx` turns off bloom and shadows, for weak GPUs.
-- `?nofallback` turns off automatic quality reduction.
+**Settings → Low / Medium / High** cover render scale, shadows, bloom, particles, the number of real lights, mouse sensitivity, invert-Y and an FPS counter. Medium is the default. URL flags `?lowfx` and `?highfx` force a preset.
 
-Without `?nofallback`, the game watches the frame rate during the first seconds of play. If it runs slowly, it lowers the resolution first and then turns off bloom.
+## Technical notes
 
-**Deploying (optional):** the `dist/` folder is a static site and works on Vercel, Netlify, GitHub Pages or itch.io. `vite.config.js` uses a relative base path, so the game also runs from a sub-folder.
-
-## Project structure
+- **Camera:** a spring-arm third-person rig. The mouse controls the camera's yaw and pitch, with pitch clamped. A 5-ray collision probe pulls the camera in front of walls. The shoulder offset shrinks in corridors. The look direction comes straight from yaw and pitch, so "W = forward" always matches the screen. (This fixed the earlier bug where the title-screen camera stayed active during play.)
+- **Movement:** camera-relative and normalised, simulated in fixed steps of at most 1/30 s, so it behaves the same at any frame rate. Held keys are released when the window loses focus.
+- **Puzzles:** fully data-driven (`src/world/levels.js`, `src/game/Puzzle.js`). Shadows are designed guides, never taken from renderer shadow maps. A bridge's collider turns on only when the bridge is fully formed. Only the relic's own rotation is rewound. Every failure can be recovered.
+- **Performance:** fire lights are drawn from a small fixed pool of real lights; repeated parts are merged or instanced; zones are culled by distance; collision uses a spatial grid; one shadow-casting light follows the player. See [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md).
 
 ```
-index.html                 UI markup (title, HUD, pause, victory, controls, credits)
-src/main.js                entry point
-src/game/Game.js           renderer, lighting, post-processing, main loop with fixed sub-steps, top-level states
-src/game/Input.js          keys, edge-triggered presses, mouse look, clears held keys when the window loses focus
-src/game/PlayerController.js  camera-relative movement, collision, falling and respawn
-src/game/CameraController.js  over-the-shoulder camera, pitch clamp, pulls in near walls
-src/game/CollisionWorld.js oriented boxes for floors, walls and bridges (never taken from meshes)
-src/game/PuzzleManager.js  per-room state machine: INTRO → UNLIT → IGNITING → ALIGNING → BRIDGE_* → EXIT_REACHED → COMPLETE
-src/game/TimeRecorder.js   20 Hz, 4 s history of the relic's rotation; rewind playback
-src/game/LevelManager.js   room loading and reset, ember awards, transitions, Heart Ember finale
-src/game/UIManager.js      HUD, prompts, timer ring, memory bar, menus
-src/game/AudioManager.js   every sound effect and ambience synthesised with the Web Audio API
-src/game/Effects.js        capped, reused particle pools (fire, time sparks, falling ash)
-src/objects/*              procedural models: Keeper, Relic, ShadowGuide, ShadowBridge, TargetRune, HeartEmber, EmberPickup, Environment kit, Glyphs
-src/levels/level1-3.js     data-driven room definitions (layout, angles, tolerances, timer)
-tests/                     automated playthrough, screenshot capture, offline audio check
-docs/                      asset manifest, licences, test checklist, trailer plan, screenshots
+src/game/    Game loop & states, Input, PlayerController, CameraController, CollisionWorld,
+             Puzzle (multi-relic logic), TimeRecorder, LightPool, Settings, UI, Audio, Effects
+src/world/   levels.js (temple layout + 10 level specs), World.js (build/progress/culling), Progress.js (save)
+src/story/   script.js (all dialogue, scenes, inscriptions), Story.js (cutscene & bark director)
+src/objects/ procedural models: Keeper, Relic, ShadowGuide, ShadowBridge, TargetRune, Gate, HeartEmber, Environment kit
+tests/       playthrough.py (all 10 levels, 120 checks), perf.py, capture.py, audio_check.py, smoke.py
 ```
-
-## Design notes and deviations from the design bible
-
-These implementation decisions go beyond or refine `Ashen_Minutes_Master_Design_and_Asset_Bible_v3.pdf`:
-
-- **The shadow guide is designed, not computed.** It is a mesh that follows the relic's rotation. The bridge is a predefined set of slabs whose collider switches on only once the slabs are fully in place, and switches off the moment they start to fade.
-- **Alignment is checked by angle only:** the shortest wrapped difference to the target angle. Tolerances are 8°, 6° and 5° for the three rooms.
-- **The relic locks when aligned.** It snaps exactly onto the target, so you can't overshoot and make the bridge vanish.
-- **The collar (Rooms 2–3) is an addition.** Without it, free rotation would make rewinding optional. The scripted jolt on ignition never passes through the solution angle, so you have to rewind.
-- **The echo angle is a pinned memory.** Only movement is recorded, and the first sample is never evicted. You can't erase the memory the puzzle needs, however long you fiddle with the relic.
-- **When Room 3's span expires, the relic slips 70°.** You re-align it with a short rewind instead of restarting the room.
-- **The simulation runs in fixed sub-steps of 1/30 s or less.** On slow machines the game keeps real-time speed without the Keeper tunnelling through walls.
 
 ## Testing
 
 ```bash
 npm run build && npx vite preview --port 4173 &
-python3 tests/playthrough.py      # full start-to-victory run with real key presses (needs Python Playwright)
-python3 tests/capture.py          # full-quality screenshots into docs/screenshots
-python3 tests/audio_check.py      # renders every synthesised sound offline and checks its levels
+python3 tests/playthrough.py     # needs Python Playwright
+python3 tests/perf.py            # draw calls / triangles / CPU step per area
+python3 tests/audio_check.py
 ```
 
-`docs/TEST_CHECKLIST.md` lists the automated and manual checks and their latest results.
+The playthrough sends **real keyboard events** and solves all ten levels. It walks every bridge and gate on the critical path, and also checks the controls at four camera angles, camera collision, focus loss, cutscene skipping, wrong-solution cases, timer pause and expiry, and save/continue. Latest result: **120/120**. See [`docs/TEST_CHECKLIST.md`](docs/TEST_CHECKLIST.md).
 
 ## Assets and licences
 
-- **Code:** MIT (see `LICENSE`).
-- **3D models, textures, glyphs, particles and audio:** all original and generated procedurally at runtime by this repository's code. No third-party models, textures or sounds are used.
-- **Fonts:** Cinzel and Inter, bundled through `@fontsource`, under the SIL Open Font License 1.1.
-- **Libraries:** three.js (MIT) and Vite (MIT).
+- **Code:** MIT.
+- **Everything visual and audible** (models, textures, glyphs, particles, music drone and sound effects) is generated by this repository's code at runtime. No third-party art or audio is used.
+- **Fonts:** Cinzel and Inter, under the SIL Open Font License 1.1.
+- **Libraries:** three.js and Vite, both MIT.
 
-See `docs/ASSETS_LICENSES.md` and `docs/ASSET_MANIFEST.csv`.
+See [`docs/ASSETS_LICENSES.md`](docs/ASSETS_LICENSES.md).

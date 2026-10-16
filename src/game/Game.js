@@ -473,7 +473,8 @@ export class Game {
     this.player.keeper.lanternBoost = fl ? 2.2 : 0;
     const cur = this.world.activePuzzle;
     this.ui.updateHUD(cur, this.player, null, this.objectiveText(cur));
-    this.ui.setLevelName(cur ? `${cur.level.numeral} · ${cur.level.name}` : '');
+    const ringAwake = !!cur?.level.hub && [...cur.relics.values()].some((r) => r.awake);
+    this.ui.setLevelName(!cur ? '' : cur.level.hub && !ringAwake ? 'The Sanctuary of Minutes' : `${cur.level.numeral} · ${cur.level.name}`);
     if (input.wasPressed('KeyE') && !cur?.prompt0) this.ui.hideReading();
   }
 
