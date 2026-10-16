@@ -222,7 +222,7 @@ export function arch(ctx, x, z, { width = 2.8, height = 3.6, yaw = 0, door = fal
   return { group: g, door: doorMesh, rune: runeMat };
 }
 
-/** Brazier (OBJ_Brazier): starts cold; Game lights it when the room's relic ignites. */
+/** Brazier (OBJ_Brazier): a fire. Decorative ones wake with their room; gameplay ones (`sconce`) are kindled by hand or by a shadow. */
 export function brazier(ctx, x, z, { eternal = false, lit = false, dormant = false, sconce = false, id = null, burn = 20 } = {}) {
   const { group, world } = ctx;
   const g = new THREE.Group();
@@ -367,7 +367,7 @@ export function wallZ(ctx, x, z0, z1, h = 5, gaps = [], w = 3.6, opts = {}) {
   if (end - cur > 0.6) wall(ctx, { x0: x, z0: cur, x1: x, z1: end, h, ...opts });
 }
 
-/** Sliding rail for a movable relic + its lever. Returns lever world position. */
+/** Sliding rail for a rail stone + its lever. */
 export function rail(ctx, from, to, slots, lever) {
   const g = new THREE.Group();
   const dx = to.x - from.x, dz = to.z - from.z;

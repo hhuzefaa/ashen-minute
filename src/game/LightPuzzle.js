@@ -61,8 +61,6 @@ export class LightPuzzle {
     this.ashZones = FEATURES.ASH_DARK ? level.ashZones || [] : [];
     this.backSigils = parts.backSigils || [];
     this._v = new THREE.Vector3();
-    // old dial-puzzle API, kept only while rooms on the old system remain (removed in Phase 6)
-    this.relics = new Map(); this.selected = null; this.stats = { rewinds: 0 }; this.hudTimer = null;
     this.marrow = level.marrow ? new MarrowEcho(game, level.marrow.path, { speed: level.marrow.speed ?? 1.6 }) : null;
   }
 

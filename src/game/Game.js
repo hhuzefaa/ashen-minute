@@ -538,6 +538,8 @@ export class Game {
     if (this.state !== STATE.PAUSED) this.time += dt;
 
     if (input.wasPressed('KeyM')) this.toggleMute();
+    // trailer camera (dev builds only): F9 hides the whole HUD for clean footage
+    if (import.meta.env.DEV && input.wasPressed('F9')) { const h = document.getElementById('hud'); h.style.visibility = h.style.visibility === 'hidden' ? '' : 'hidden'; }
     if (input.wasPressed('Escape') && this.state !== STATE.CUTSCENE) {
       if (this.ui.overlayOpen) this.ui.overlay(null);
       else if (this.state === STATE.PLAYING) this.pause();

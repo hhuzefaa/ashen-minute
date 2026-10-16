@@ -24,20 +24,26 @@
 - **Collision** uses a spatial grid (8 m cells), and the simulation runs in fixed steps of at most 1/30 s, so movement stays the same at any frame rate.
 - **Settings menu:** Low, Medium (the default) and High presets, plus individual controls for render scale, shadows, bloom, particles, number of real lights, sensitivity and invert-Y. There is an FPS / draw-call overlay.
 
-## Measurements (honest scope)
-These numbers come from headless Chromium using SwiftShader (software WebGL) on a 2-core cloud machine. That setup **cannot measure real-GPU frame rate**. The figures that do carry over to real hardware are **draw calls, triangles and CPU simulation time**. They come from `tests/perf.py` at 960×540, and the counts include the shadow and bloom passes.
+## The redesign ("You are the light") and its budgets
+- Shadows are computed on the CPU (no extra render passes): at most **16 shadow visuals and 16 shadow colliders** (pooled, hidden when unused), plus 6 Focus previews. Each visual is 7 small meshes (a few dozen triangles).
+- All new lights — sconces, echoes, Marrow, the Tier 3 sun — are `LightSource`s feeding the same fixed pool of real lights; echoes use ghost Keepers with **no real light of their own**, so the shader light count never changes. The only real light added is Ilen's lantern, which was already there (now brighter: 10 / 12 m, so shadows read as darkness carved out of light).
+- `ShadowSystem` and `Echo` reuse their scratch vectors, light records and sample buffers (no per-frame allocation in those loops). Echo recordings are fixed `Float32Array`s (30 Hz × 8 s).
 
-| Spot | Medium: draw calls / triangles | Low: draw calls / triangles | CPU step |
-|---|---|---|---|
-| Entrance | 193 / 57k | 146 / 43k | 0.09 ms |
-| Threshold (L1) | 170 / 48k | 109 / 30k | 0.1–0.3 ms |
-| Hub | 288 / 98k | 178 / 56k | 0.06–0.2 ms |
-| Echo Court (L2) | 178 / 79k | 88 / 41k | 0.07 ms |
-| Measured Shadow (L4) | 144 / 68k | 70 / 41k | 0.05 ms |
-| Relay (L6) | 188 / 96k | 98 / 57k | 0.09 ms |
-| Crossroads (L7) | 235 / 88k | 164 / 60k | 0.05 ms |
-| Clockwork (L8) | 205 / 79k | 101 / 38k | 0.09 ms |
-| Mirror Hall (L9) | 139 / 45k | 71 / 24k | 0.04 ms |
+## Measurements (honest scope)
+These numbers come from headless Chromium using SwiftShader (software WebGL) on a 2-core cloud machine. That setup **cannot measure real-GPU frame rate**. The figures that do carry over to real hardware are **draw calls, triangles and CPU simulation time**. They come from `tests/perf.py` at 960×540 on **Medium** after the redesign, and the counts include the shadow and bloom passes.
+
+| Spot | Draw calls / triangles | CPU step |
+|---|---|---|
+| Entrance | 183 / 54k | 0.29 ms |
+| Room I | 179 / 47k | 0.13 ms |
+| Hub | 264 / 96k | 0.05 ms |
+| Hub, west side | 201 / 99k | 0.14 ms |
+| Room II | 165 / 78k | 0.08 ms |
+| West passage (id 4) | 124 / 67k | 0.17 ms |
+| Room V (id 6) | 179 / 99k | 0.12 ms |
+| North passage (id 7) | 220 / 90k | 0.10 ms |
+| East passage (id 8) | 178 / 77k | 0.14 ms |
+| Room VI (id 9) | 133 / 46k | 0.05 ms |
 
 For comparison, the old 3-room build showed **272 draw calls and 333k triangles** at a single spot, before counting the extra shadow and bloom passes.
 

@@ -1,57 +1,51 @@
 # Test checklist
 
-✅ = verified automatically by `tests/playthrough.py` (120 checks, real keyboard events, deterministic stepping), `tests/audio_check.py` or `tests/perf.py`.
+✅ = verified automatically: `tests/playthrough.py` (**151/151**, real keyboard events, deterministic 1/30 s stepping, the whole game from cold open to victory), `tests/features.py` (**12/12**, Tier 3 flags on), `tests/audio_check.py`, `tests/perf.py`.
 👤 = needs a person on real hardware.
 
-## Controls and camera (manual checklist, with automated coverage where possible)
-- ✅ W, S, A and D each move in the correct camera-relative direction at camera yaws of 0°, 90°, 180° and −90° (16 checks)
-- ✅ Diagonal speed equals straight speed (3.70 = 3.70)
-- ✅ The camera follows the Keeper (distance stays between 2 and 6 m while walking)
-- ✅ The camera pulls in front of a wall instead of passing through it
-- ✅ Losing window focus pauses the game and releases held keys; Resume restores play
+## Controls, camera, flow
+- ✅ Cold open hands over control in < 30 s of game time; Space advances dialogue; Esc skips a cutscene and returns control with the follow camera
+- ✅ W, S, A, D move camera-relative at yaws 0°, 90°, 180°, −90° (16 checks); diagonal speed equals straight speed
+- ✅ Camera follows (2–6 m) and pulls in front of walls; focus loss pauses and releases held keys
 - ✅ A sealed gate blocks the Keeper
-- ✅ Cutscenes: Space advances, Esc skips, and control plus the follow camera return afterwards
-- 👤 Mouse look feels right; pointer lock is captured on click; Esc releases the mouse and pauses
-- 👤 Mouse wheel zoom, Shift run, and the Q focus overlay
-- 👤 Walk the camera through narrow corridors, past hub pillars, and around the island edges
+- ✅ No gap can be hopped (a running coyote hop at Room I's 3.5 m gap falls)
+- 👤 Mouse feel, pointer lock, wheel zoom, camera assist near stones (Settings toggle)
 
-## World and progression
-- ✅ L1 gate → gallery → hub on foot; hub arrival scene
-- ✅ Hub west gate → L2 → L3 → L4 on foot through each opened gate
-- ✅ L4 → west shortcut corridor → hub
-- ✅ Hub north gate → L5 → L6 (through the inner gate) → L7
-- ✅ L7 door → north shortcut → hub
-- ✅ Hub east gate → L8 (through the inner gate) → L9 → east shortcut → hub
-- ✅ Each ember is awarded once; 10/10 at the end; Continue is offered from the save
-- 👤 Reload the page mid-game, choose **Continue**, and check that opened gates and solved levels persist
+## The rules
+- ✅ Rule 1 is truthful: no decorative fire within 9 m of any stone (build-time check)
+- ✅ The shadow follows the lantern (yaw error < 2°) and lengthens when Ilen steps back
+- ✅ Runes need 0.4 s under the same shadow: walking past does not trigger; standing does; the stone glows gold
+- ✅ Ilen's own shadow can't be walked: walking at it, she never stands on it and falls; respawn on the last safe floor in < 1 s
+- ✅ A sconce's shadow over the abyss holds you; walking off a short one drops you
+- ✅ A dying fire gives ≥ 0.9 s of warning before its shadow drops you; a coyote hop still works then
+- ✅ Rule 4 also holds for Ilen: standing on a sconce's line, her own shadow re-lights it
+- ✅ Echoes: R does nothing before the grant; R marks a minute; falling cancels it; R dismisses (one at a time); Backspace clears; the echo holds its light and its shadow carries you
+- ✅ Hints on demand after 60 s without progress; Focus (Q) shows sconce previews
+- ✅ Lock feedback, relay trails, burn-down visuals (code paths exercised by the playthrough)
 
-## Puzzles (all solved with real input)
-- ✅ I–X each solved end to end, every bridge walked with W, no falls
-- ✅ II: the collar alone cannot solve it; rewind returns to the echo
-- ✅ IV: the wrong socket cannot solve it (length mismatch); the lever slides the relic
-- ✅ V: rewinding through the answer does not solve it; the rune blinks; Backspace restarts; stopping near the answer and nudging solves it
-- ✅ VI: the cold relic refuses E; the relay lights it and opens the inner gate
-- ✅ VII: cold relics refuse without a flame; a decoy's shadow is rejected on the door rune; the eye relic opens the door
-- ✅ VIII: the timed span runs; the timer pauses while on the span; on expiry the span fades with collider off and the relic slips; rewind restores it; then it is crossed
-- ✅ IX: relay chain A → B → C; island rail; 7 s span
-- ✅ X: all three sockets held at once → final span → finale → victory
+## Rooms (all solved on foot with real input)
+- ✅ I: light map zone only behind the stone; bridge walked
+- ✅ II: near sconce too short; far sconce's road crossed
+- ✅ III: Marrow's patrol gives 2 windows a loop (light-map simulation, 25–45 % of the time); her sweep never lights the island sconce over a full loop; crossed on her shadow; island sconce → second gap
+- ✅ IV: no floor position can wake the door rune (light map: 0); echo holds A's shadow; standing on it over the abyss wakes the door
+- ✅ V: the door rune can't be woken from reachable floor (light map); one sweep lights the gallery in order; the far fire throws the road back; crossed
+- ✅ VI: relay through the grille; rail slide; echo-held crossing
+- ✅ Heart: w and e reachable from the walkway (light map); two permanent echoes + Ilen hold all three → final span → finale
+- ✅ Unmaking: control returns; a fall restarts only the escape; the span dissolves behind you; the ring's shadows go home; reaching Marrow ends it (≈ 25 s); victory with stats
+- ✅ Passages: bridges pre-formed; shortcuts lead home
+- ✅ Lost Minutes 1–6 each found with the intended trick (LM3's ride is checked by standing on Marrow's shadow at the fragment while it passes; LM4's chain: only the first sconce reachable)
+
+## Saves and menus
+- ✅ Main menu returns to the title; Continue is offered from the save (save v3)
+- 👤 Reload mid-game and Continue: rooms, gates, echo ability and Lost Minutes persist
 
 ## Audio / visual / performance
-- ✅ Every synthesised sound renders without NaN or clipping
-- ✅ Draw calls and triangles per area measured (`docs/PERFORMANCE.md`)
-- 👤 Real FPS at Low / Medium / High on the target laptop (Settings → Show FPS)
-- 👤 Two complete runs by a person in a clean browser profile
-
-## Redesign ("You are the light") — status on branch `redesign`
-Rooms I and II now run on the five rules (stones cast shadows away from every fire, Ilen's lantern is a fire, shadows over the abyss are solid, runes wake under a settled shadow, shadows light sconces). Rooms III–X still run the old dial puzzles until Phase 6.
-
-Automated (`tests/playthrough.py`, light map `window.__ashen.debug.lightMap(id)`):
-- ✅ Rule 1 truthfulness check: no decorative brazier within 9 m of a stone
-- ✅ I: the shadow follows the lantern (yaw error < 2°); stepping back lengthens it; too short near the stone; walking past the zone doesn't trigger (0.4 s settle); standing in the zone wakes the rune; the stone glows gold; bridge walked on foot
-- ✅ II: Ilen's own shadow lies across the chasm but can't be walked (fall, never on it); respawn at last safe ground in < 1 s; near sconce's shadow stops at the edge and walking off it drops you; far sconce's shadow crosses (light map + on foot); ≥ 0.9 s warning when a fire dies under you; coyote hop; rule 4 (your shadow re-lights a sconce on its line)
+- ✅ Every cue renders non-silent (`audio_check.py`, includes the new echo, crumble, crack and thud cues)
+- ✅ Draw calls / triangles per area within the previous budget (`perf.py`, see PERFORMANCE.md)
+- 👤 Frame rate on real hardware at Low / Medium / High; readability with bloom off (Low)
 
 ## Human playtest 8.3 (run after Phase 3, and again before freeze)
-Setup: `npm run build && npx vite preview`, open the URL, **New Game**, press Esc to skip the opening. Three people, one at a time; play silently, **no hints from the watcher**. Stop each person after Room II (the Room II far door) — Rooms III+ are still the old design.
+Setup: `npm run build && npx vite preview`, open the URL, **New Game**, press Esc to skip the opening. Three people, one at a time; play silently, **no hints from the watcher**. Rooms I–II answer the first questions; the whole game can now be played (watch where they stall in III–VI).
 
 Watch and note for each player:
 1. Seconds until they show they understand "I am the light" in Room I (they walk around the stone *on purpose* to swing the shadow). Target: < 60 s.
