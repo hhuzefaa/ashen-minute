@@ -117,3 +117,13 @@ export const READINGS = {
   L7_hint: 'THE DOOR OPENS ONLY FOR ITS OWN SIGN.  ◉',
 };
 export const SECRETS = ['S1', 'S2', 'S3'];
+
+// Lost Minutes: six optional fragments of the past (brief §4.4). Shown in the reading panel.
+export const LOST_MINUTES = {
+  lm1: 'Marrow, teaching:  “Again. Slower. The shadow is not late — you are early.”',
+  lm2: 'A child’s laugh in the Echo Court. Marrow, softly:  “Taller than the dial today.”',
+  lm3: 'Marrow alone, on her rounds:  “Three thousand six hundred and fifty. She’ll come.”',
+  lm4: 'Ilen, fifteen, at the gate:  “I’ll be back before the bells.”  She wasn’t.',
+  lm5: 'Marrow, to the dark:  “I put it out so they could keep their mornings. Forgive me.”',
+  lm6: 'Marrow, laughing:  “You’ll be a better Keeper than me, Ilen. You’ll leave.”',
+};

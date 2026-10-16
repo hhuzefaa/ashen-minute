@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { SCENES, RELIC_LINES, COMPLETE_LINES, ENTER_LINES, READINGS, SECRETS, SPEAKERS } from './script.js';
+import { SCENES, RELIC_LINES, COMPLETE_LINES, ENTER_LINES, READINGS, SECRETS, SPEAKERS, LOST_MINUTES } from './script.js';
 
 // Story director: decides when scenes and barks play, runs in-engine cutscenes, and records
 // which beats have been seen (persisted with the save). Cutscenes are skippable (Esc) and always
@@ -32,6 +32,9 @@ export class Story {
     this.say(sp, text, 5.5);
   }
 
+  /** First time the Keeper's own lantern visibly swings a stone's shadow in a room. */
+  onFirstShadow(L) { /* room barks are data-driven (levels.js `barks.firstShadow`) */ }
+
   onLevelComplete(L) {
     if (L.onComplete.story) { this.game.delay(1.2, () => this.trigger(L.onComplete.story)); return; }
     const c = COMPLETE_LINES[L.id];
@@ -41,6 +44,13 @@ export class Story {
   onEnterLevel(L) {
     const k = 'enter_' + L.id;
     if (ENTER_LINES[L.id] && !this.seen(k)) { this.progress.mark('story', k); this.say(...ENTER_LINES[L.id], 5); }
+  }
+
+  /** A Lost Minute: a two-line memory in the reading panel. */
+  lostMinute(id) {
+    const text = LOST_MINUTES[id];
+    if (!text) return;
+    this.game.ui.showReading(text, `Lost Minutes ${this.progress.data.lostMinutes.length}/6`);
   }
 
   reading(id) {

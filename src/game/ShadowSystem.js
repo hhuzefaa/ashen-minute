@@ -47,6 +47,7 @@ export function coverDistance(s, x, z) {
 /** Tip test (rail-stone length puzzles): the tip lands on (x,z) within tol. */
 export function tipDistance(s, x, z, tol) {
   const dx = x - s.stone.base.x, dz = z - s.stone.base.z;
+  if (dx * s.ux + dz * s.uz <= 0) return Infinity; // the tip is ahead of the stone, never behind it
   if (Math.abs(Math.hypot(dx, dz) - s.len) > tol) return Infinity;
   return Math.abs(-dx * s.uz + dz * s.ux);
 }

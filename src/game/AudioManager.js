@@ -216,7 +216,26 @@ export class AudioManager {
         this._noise(t, 0.7, { gain: 0.45, f0: 1500, f1: 200, q: 1, rev: 0.5 });
         break;
       case 'step':
-        this._noise(t, 0.07, { gain: 0.1 + Math.random() * 0.04, type: 'lowpass', f0: 500 + Math.random() * 300, rev: 0.25 });
+        this._noise(t, 0.07, { gain: (0.1 + Math.random() * 0.04) * (opts.gain ?? 1), type: 'lowpass', f0: (500 + Math.random() * 300) * (opts.gain ? 0.6 : 1), rev: 0.25 });
+        break;
+      case 'sfx_echo_mark': {
+        // a reversed shimmer: swells in instead of decaying
+        this._noise(t, 0.7, { gain: 0.18, type: 'bandpass', f0: 800, f1: 4200, q: 3, attack: 0.6, rev: 0.7 });
+        [880, 1318.5, 1760].forEach((f, i) => this._tone(f, t + 0.05 * i, 0.75, { type: 'sine', gain: 0.05, attack: 0.6, rev: 0.8 }));
+        break;
+      }
+      case 'sfx_echo_release':
+        [1760, 1318.5, 880, 659.25].forEach((f, i) => this._tone(f, t + i * 0.06, 0.9, { type: 'triangle', gain: 0.06, rev: 0.8 }));
+        this._noise(t, 0.6, { gain: 0.1, type: 'highpass', f0: 4000, rev: 0.6 });
+        break;
+      case 'sfx_echo_crumble':
+        this._noise(t, 1.2, { gain: 0.35, type: 'lowpass', f0: 1800, f1: 160, buf: this.brown, attack: 0.01, rev: 0.5 });
+        this._noise(t, 0.5, { gain: 0.12, f0: 3000, q: 2, rev: 0.4 });
+        this._tone(330, t, 0.9, { type: 'triangle', gain: 0.05, glideTo: 110, rev: 0.7 });
+        break;
+      case 'sfx_stone_thud':
+        this._tone(55, t, 0.5, { type: 'sine', gain: 0.8, glideTo: 38, rev: 0.25 });
+        this._noise(t, 0.18, { gain: 0.4, type: 'lowpass', f0: 420, buf: this.brown, rev: 0.3 });
         break;
       case 'sfx_door':
         this._noise(t, 2.2, { gain: 0.35, type: 'lowpass', f0: 260, f1: 140, buf: this.brown, attack: 0.3, rev: 0.5 });

@@ -17,7 +17,7 @@ export function lightMap(game, levelId, { step = 0.5, render = false, extraLight
   const o = { yaw: 0, len: 0, ux: 0, uz: 0, d: 0 };
   const a = new THREE.Vector3(), b = new THREE.Vector3(), tmp = new THREE.Vector3();
   const fake = (stone) => ({ stone, ux: o.ux, uz: o.uz, len: o.len, yaw: o.yaw, d: o.d });
-  const runeHit = (ru, s) => (ru.spec.tip ? tipDistance(s, ru.pos.x, ru.pos.z, ru.spec.tol ?? 0.7) : coverDistance(s, ru.pos.x, ru.pos.z)) <= SHADOW.COVER;
+  const runeHit = (ru, s) => (ru.spec.tip ? tipDistance(s, ru.pos.x, ru.pos.z, ru.spec.tol ?? 0.7) : coverDistance(s, ru.pos.x, ru.pos.z)) <= (ru.spec.lat ?? SHADOW.COVER);
   for (const ru of p.runes.values()) out.runes[ru.spec.id] = { valid: 0, wrong: 0, zone: null, byStone: {}, points: [] };
   for (const sc of p.sconces) out.ilenRelay[sc.id] = 0;
 

@@ -10,7 +10,8 @@ import { HeartEmber } from '../objects/HeartEmber.js';
 import { Gate } from '../objects/Gate.js';
 import { rail as railVisual, brazier } from '../objects/Environment.js';
 import { Puzzle, RelicState, railPoint } from '../game/Puzzle.js';
-import { LightPuzzle } from '../game/LightPuzzle.js';
+import { LightPuzzle, railPoint as lightRailPoint } from '../game/LightPuzzle.js';
+import { COLORS } from '../game/Palette.js';
 import { SHADOW } from '../game/ShadowSystem.js';
 import { Progress } from './Progress.js';
 
@@ -28,6 +29,7 @@ export class World {
     this.gates = new Map();
     this.puzzles = [];
     this.lightPuzzles = [];
+    this.lostMinutes = [];
     this.levelById = new Map();
     this.progress = new Progress();
     this.activePuzzle = null;
@@ -88,6 +90,54 @@ export class World {
     }
   }
 
+  /** Optional fragment of Ilen's past (Lost Minute). `hidden` ones appear when a rune reveals them. */
+  makeLostMinute(ctx, lm) {
+    const e = new EmberPickup(new THREE.Vector3(lm.at[0], lm.y ?? 1.1, lm.at[1]), { lost: true });
+    e.id = lm.id;
+    e.hidden = !!lm.hidden;
+    e.radius = 0.9;
+    ctx.group.add(e.group);
+    this.lostMinutes.push(e);
+    return e;
+  }
+
+  syncLostMinutes() {
+    const got = this.progress.data.lostMinutes;
+    for (const e of this.lostMinutes) {
+      e.collected = got.includes(e.id);
+      e.group.visible = !e.collected && !e.hidden;
+    }
+  }
+
+  revealLostMinute(id) {
+    const e = this.lostMinutes.find((x) => x.id === id);
+    if (!e || e.collected || !e.hidden) return;
+    e.hidden = false;
+    e.group.visible = true;
+    this.game.audio.play('sfx_echo_release');
+  }
+
+  collectLostMinute(e) {
+    if (e.collected || e.hidden) return;
+    e.collected = true;
+    e.group.visible = false;
+    this.progress.mark('lostMinutes', e.id);
+    this.game.audio.play('sfx_ember_collect');
+    this.game.effects.burst(e.base, 50, this.game.effects.c.time, 2.6, 0.12, 1.2, this.game.effects.time);
+    this.game.story.lostMinute(e.id);
+  }
+
+  /** The Heart: all three ring shadows held together. */
+  onAllSockets(puzzle) {
+    this.finalBridge.appear();
+    this.game.audio.play('sfx_bridge_form', { count: this.finalBridge.slabs.length });
+    this.heart.sealLevel = 3;
+    this.heart.awake = 0.25;
+    if (puzzle.ember) puzzle.ember.group.visible = true;
+    puzzle.showFlash('THE HEART REMEMBERS THE WAY', 'gold', 3);
+    this.game.story.trigger('sockets_done');
+  }
+
   /** A room built on the five rules (levels.js `v2: true`). */
   buildLightLevel(L, zone) {
     const ctx = zone.ctx;
@@ -96,20 +146,22 @@ export class World {
     L.build(ctx);
     const stones = [];
     for (const sp of L.stones) {
-      const base = new THREE.Vector3(sp.at[0], sp.y || 0, sp.at[1]);
+      const base = sp.rail ? lightRailPoint(sp.rail, sp.rail.start ?? 0) : new THREE.Vector3(sp.at[0], sp.y || 0, sp.at[1]);
       const ped = sp.ped ?? 0.95;
       const relic = new Relic({ position: base, pedestalHeight: ped, startYaw: (sp.faceDeg ?? 0) * DEG });
       relic.stone = true;
       relic.group.traverse((o) => { o.castShadow = false; }); // only fires cast a stone's shadow (no moon shadow)
       ctx.group.add(relic.group);
-      const collider = this.collision.add({ cx: base.x, cy: ped / 2, cz: base.z, hx: 0.55, hy: ped / 2, hz: 0.55, tag: 'wall' });
-      stones.push({ id: sp.id, spec: sp, relic, base: relic.base, collider, dormant: !!sp.dormant, awake: false, shadows: new Map(), glow: 0 });
+      // 'stone': solid to walk into, but never blocks light or other stones' shadows
+      const collider = this.collision.add({ cx: base.x, cy: ped / 2, cz: base.z, hx: 0.55, hy: ped / 2, hz: 0.55, tag: 'stone', dynamic: !!sp.rail });
+      if (sp.rail) railVisual(ctx, { x: sp.rail.from[0], z: sp.rail.from[1] }, { x: sp.rail.to[0], z: sp.rail.to[1] }, sp.rail.slots, { x: sp.rail.lever[0], z: sp.rail.lever[1] });
+      stones.push({ id: sp.id, spec: sp, relic, base: relic.base, collider, dormant: !!sp.dormant, awake: false, shadows: new Map(), glow: 0, rail: sp.rail || null, slot: sp.rail ? sp.rail.start ?? 0 : 0, moving: null });
     }
     const runes = new Map();
     for (const rp of L.runes) {
       const pos = new THREE.Vector3(rp.at[0], rp.y || 0, rp.at[1]);
-      const owner = L.stones.find((s) => s.id === rp.stones[0]);
-      const facing = Math.atan2(-(pos.x - owner.at[0]), -(pos.z - owner.at[1]));
+      const owner = stones.find((s) => s.id === rp.stones[0]);
+      const facing = Math.atan2(-(pos.x - owner.base.x), -(pos.z - owner.base.z));
       const view = new TargetRune(pos, facing, { stele: rp.stele !== false, emblem: rp.emblem });
       ctx.group.add(view.group);
       view.addCollider(this.collision);
@@ -125,6 +177,7 @@ export class World {
       const b = brazier(ctx, sc.at[0], sc.at[1], { sconce: true, id: sc.id, burn: sc.burn ?? 20 });
       b.lightId = 's:' + sc.id;
       b.relayT = 0;
+      b.warded = !!sc.warded; // behind a grille: only a shadow can light it
       sconces.push(b);
     }
     let ember = null;
@@ -132,8 +185,20 @@ export class World {
       ember = new EmberPickup(new THREE.Vector3(L.ember[0], L.emberY ?? 1.1, L.ember[1]));
       ctx.group.add(ember.group);
     }
+    let grant = null;
+    if (L.grant) {
+      // Marrow's sigil: a cyan ring on the floor; stepping onto it grants the minute-mark
+      const m = new THREE.MeshBasicMaterial({ color: new THREE.Color(COLORS.time).multiplyScalar(1.4), transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
+      const mesh = new THREE.Group();
+      mesh.add(new THREE.Mesh(new THREE.RingGeometry(0.75, 0.9, 40).rotateX(-Math.PI / 2), m));
+      mesh.add(new THREE.Mesh(new THREE.RingGeometry(0.35, 0.45, 3).rotateX(-Math.PI / 2), m));
+      mesh.position.set(L.grant.at[0], 0.05, L.grant.at[1]);
+      ctx.group.add(mesh);
+      grant = { spec: L.grant, mesh };
+    }
+    const pickups = (L.lostMinutes || []).map((lm) => this.makeLostMinute(ctx, lm));
     const p = new LightPuzzle(this.game, L, {
-      stones, runes, sconces, ember,
+      stones, runes, sconces, ember, grant, pickups,
       braziers: ctx.braziers.slice(prevBraziers),
       readables: ctx.readables.slice(prevRead),
     });
@@ -228,6 +293,7 @@ export class World {
       if (pr.completed.includes(p.level.id)) p.applyCompleted();
     }
     if (pr.completed.includes(9)) this.wakeRing(false);
+    this.syncLostMinutes();
     this.updateHubBraziers(true);
     if (pr.checkpoint) this.checkpoint = { ...pr.checkpoint };
   }

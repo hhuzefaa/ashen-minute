@@ -15,6 +15,7 @@ import { LightPool } from './LightPool.js';
 import { COLORS, glowTexture } from './Palette.js';
 import { World } from '../world/World.js';
 import { ShadowSystem } from './ShadowSystem.js';
+import { EchoSystem } from './Echo.js';
 import { lightMap } from './LightMap.js';
 import { Story } from '../story/Story.js';
 import { emberMesh } from '../objects/EmberPickup.js';
@@ -70,6 +71,7 @@ export class Game {
     this.ui = new UIManager(this);
     this.world = new World(this);
     this.shadows = new ShadowSystem(this);
+    this.echoes = new EchoSystem(this);
     this.story = new Story(this);
     this.debug = { lightMap: (levelId, opts) => lightMap(this, levelId, opts) };
 
@@ -154,6 +156,7 @@ export class Game {
     this.ui.setContinue(this.world.progress.hasSave);
     this.audio.stopAllLoops();
     this.story.scene = null;
+    this.echoes.clear();
     this.shadows.ilenActive = false;
     this.shadows.clear();
     this.titleT = 0;
@@ -175,6 +178,8 @@ export class Game {
     this.ui.fadeTo(1, 0.5);
     setTimeout(() => {
       this.world.resetAll();
+      this.echoes.clear();
+      this.echoes.made = 0;
       this.shadows.clear();
       this.world.progress.data.started = true;
       this.world.progress.save();
@@ -322,6 +327,7 @@ export class Game {
     if (pl.hasSafe) pl.setSpawn(pl.lastSafe, pl.lastSafeYaw); // back to the last safe ground
     else { const cp = this.world.checkpoint; pl.setSpawn(new THREE.Vector3(cp.x, 0, cp.z), cp.yaw); }
     pl.flame = null;
+    this.echoes.cancelRecording(); // falling cancels a minute being marked
     this.falls = (this.falls || 0) + 1;
     this.lastFallAt = this.time;
     this.cameraCtl.snap(pl.spawnYaw, 0.3);
@@ -339,11 +345,30 @@ export class Game {
     if (!p || (p.level.hub && !this.world.progress.data.completed.includes(9))) { this.respawn(); return; }
     this.ui.fadeTo(1, 0.25);
     setTimeout(() => {
+      this.echoes.clear();
       this.world.restartActivePuzzle();
       const [x, z, yaw] = p.level.spawn;
       this.placePlayer(x, z, yaw);
       this.ui.fadeTo(0, 0.5);
     }, 260);
+  }
+
+  /** Lock feedback on every rune trigger: hit-stop, a camera tremor, a stone thud and dust. */
+  lockFeedback(pos) {
+    this.hitstop = 0.06;
+    this.cameraCtl.shake(0.06, 0.15);
+    this.audio.play('sfx_stone_thud');
+    const fx = this.effects;
+    fx.burst(this._lf || (this._lf = new THREE.Vector3()).set(pos.x, pos.y + 0.15, pos.z), 40, fx.c.ash, 1.6, 0.1, 1.0, fx.ash);
+    fx.burst(this._lf.set(pos.x, pos.y + 0.3, pos.z), 50, fx.c.gold, 3, 0.14, 1.2);
+  }
+
+  /** A released echo counts as progress in the room, and Ilen notices the first one. */
+  onEchoReleased() {
+    this.world.activePuzzle?.onEchoReleased?.();
+    if (!this.story.seen('bark_first_echo')) { this.world.progress.mark('story', 'bark_first_echo'); this.story.say('ILEN', 'That’s me. Eight seconds ago.', 4.5); }
+    this.world.progress.data.echoesMade = (this.world.progress.data.echoesMade || 0) + 1;
+    this.world.progress.save();
   }
 
   /** Cutscene actions (also run instantly when a scene is skipped). */
@@ -445,7 +470,11 @@ export class Game {
 
     switch (this.state) {
       case STATE.TITLE: this.updateTitle(dt); break;
-      case STATE.PLAYING: this.updatePlaying(dt); break;
+      case STATE.PLAYING:
+        // hit-stop: a rune locking freezes the world for a beat (rendering and particles continue)
+        if (this.hitstop > 0) { this.hitstop -= dt; this.input.pressed.clear(); }
+        else this.updatePlaying(dt);
+        break;
       default:
         this.player.update(dt, input, this.cameraCtl.yaw, this.collision, { canMove: false });
         this.cameraCtl.update(dt, input, this.player.pos, this.collision, false);
@@ -455,7 +484,8 @@ export class Game {
     }
     this.story.update(dt, input);
     const pp = this.player.pos;
-    this.effects.ashBounds = { x0: pp.x - 14, x1: pp.x + 14, z0: pp.z - 14, z1: pp.z + 14, y: pp.y + 9 };
+    const ab = this.effects.ashBounds || (this.effects.ashBounds = { x0: 0, x1: 0, z0: 0, z1: 0, y: 0 });
+    ab.x0 = pp.x - 14; ab.x1 = pp.x + 14; ab.z0 = pp.z - 14; ab.z1 = pp.z + 14; ab.y = pp.y + 9;
     this.effects.update(dt);
     // the single shadow-casting light follows the Keeper (tight frustum = sharp, cheap shadows)
     this.moon.target.position.set(pp.x, 0, pp.z);
@@ -471,7 +501,10 @@ export class Game {
     const operating = !p?.isLight && !!sel && sel.lit && !sel.lockedOn && !sel.busy; // old dial rooms only
     // 1. player (strafe keys belong to the relic while operating one)
     this.player.update(dt, input, this.cameraCtl.yaw, this.collision, { canMove: true, suppressStrafe: operating, sprint: input.isDown('ShiftLeft', 'ShiftRight') });
-    // 2. light: every fire casts every nearby stone's shadow (Ilen's lantern is a fire)
+    // 2. time: R marks a minute / releases the echo; echoes replay and hold their light
+    if (input.wasPressed('KeyR') && (!p || p.isLight)) this.echoes.press();
+    this.echoes.update(dt);
+    // 2b. light: every fire casts every nearby stone's shadow (Ilen's lantern is a fire)
     this.shadows.ilenActive = true;
     this.shadows.update(dt);
     // 3. camera (assist: near a stone Ilen is shadowing, look down at the floor a little more)
@@ -490,6 +523,7 @@ export class Game {
     this.player.keeper.lanternBoost = fl ? 2.2 : 0;
     const cur = this.world.activePuzzle;
     this.ui.updateHUD(cur, this.player, null, this.objectiveText(cur));
+    this.ui.echoRing(this.echoes.hud);
     const ringAwake = !!cur?.level.hub && [...cur.relics.values()].some((r) => r.awake);
     this.ui.setLevelName(!cur ? '' : cur.level.hub && !ringAwake ? 'The Sanctuary of Minutes' : `${cur.level.numeral} · ${cur.level.name}`);
     if (input.wasPressed('KeyE') && !cur?.prompt0) this.ui.hideReading();

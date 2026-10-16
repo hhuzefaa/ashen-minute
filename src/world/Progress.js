@@ -1,14 +1,14 @@
 // Persistent world progression: completed levels, opened gates, story beats, discoveries.
-const KEY = 'ashen-minutes.save.v2';
+const KEY = 'ashen-minutes.save.v3';
 
-const fresh = () => ({ v: 2, completed: [], gates: [], story: [], secrets: [], embers: 0, checkpoint: null, started: false });
+const fresh = () => ({ v: 3, completed: [], gates: [], story: [], secrets: [], lostMinutes: [], abilities: { echo: false }, echoesMade: 0, embers: 0, checkpoint: null, started: false });
 
 export class Progress {
   constructor() {
     this.data = fresh();
     try {
       const s = JSON.parse(localStorage.getItem(KEY) || 'null');
-      if (s && s.v === 2) this.data = { ...fresh(), ...s };
+      if (s && s.v === 3) this.data = { ...fresh(), ...s, abilities: { ...fresh().abilities, ...(s.abilities || {}) } };
     } catch { /* storage unavailable */ }
   }
 

@@ -31,6 +31,7 @@ export class CameraController {
     this.assistEnabled = true;
     this.assistTarget = 0;  // Game sets 1 near a stone whose shadow Ilen is casting
     this.assistK = 0;
+    this.shakeT = 0; this.shakeDur = 0; this.shakeAmp = 0;
     this.pivot = new THREE.Vector3();
     this.smoothPos = new THREE.Vector3();
     this.lookAt = new THREE.Vector3();
@@ -121,6 +122,11 @@ export class CameraController {
 
     const shoulder = SHOULDER * Math.min(1, this.dist / 2.5);
     const pos = this._t.copy(this.pivot).addScaledVector(right, shoulder).addScaledVector(back, this.dist);
+    if (this.shakeT > 0) {
+      this.shakeT -= dt;
+      const a = this.shakeAmp * Math.max(0, this.shakeT / this.shakeDur);
+      pos.x += (Math.random() - 0.5) * 2 * a; pos.y += (Math.random() - 0.5) * 2 * a; pos.z += (Math.random() - 0.5) * 2 * a;
+    }
     this.camera.position.copy(pos);
     this.tooClose = this.dist < 0.75; // Game hides the Keeper so the view is never inside the hood
     // look straight along the arm (exact yaw/pitch → movement always matches the view)
@@ -129,6 +135,9 @@ export class CameraController {
     this.smoothPos.copy(pos);
     this.first = false;
   }
+
+  /** A short tremor (stone locking into place). Never moves yaw/pitch. */
+  shake(amp, dur) { this.shakeAmp = amp; this.shakeDur = dur; this.shakeT = dur; }
 
   /** Unit vector pointing to screen-right on the ground plane. */
   rightVector(out = new THREE.Vector3()) {

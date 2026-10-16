@@ -310,27 +310,31 @@ export const LEVELS = [
     },
   },
   {
-    id: 5, numeral: 'V', name: 'The Bent Memory', rect: [-13, 13, -59, -31.5],
+    id: 5, numeral: 'IV', name: 'The Kept Minute', rect: [-13, 13, -61.5, -31.5], v2: true,
     spawn: [0, -33.6, 0],
-    objective: 'Watch the rune. The answer passed through the relic’s past.',
-    relics: [{
-      id: 'A', at: [4.5, -37], aim: 'a', startDeg: 40, mode: 'collar', collar: 15, speed: 22, memory: 8, rewindSpeed: 0.9,
-      sweepFlash: true, rewindSolves: false,
-      jolt: [{ toDeg: 120, dur: 0.6 }, { toDeg: -60, dur: 2.6 }, { toDeg: -170, dur: 0.7 }], // only the slow middle swing crosses the answer
-    }],
-    runes: [{ id: 'a', at: [-4, -53.5], relics: ['A'], tol: 5, bridge: { axis: 'z', from: -43.4, to: -48.6 } }],
-    ember: [6, -55.5],
-    onComplete: { gates: ['g_L5'] },
+    objective: 'Cross. Then open the far door.',
+    // Grant: Marrow's sigil gives the minute-mark. Introduce: record the walk to the light spot
+    // behind stone A; the echo holds A's shadow across the gap while you cross. Twist: stand ON
+    // that echo-held shadow over the abyss — only there is your lantern the right distance behind
+    // stone B for B's shadow TIP to land on the door rune (tip test; d ≈ 1.9–3.1 m, all over the gap;
+    // the rune sits 1.4 m short of where the closed door clips B's shadow, so the door can't fake it).
+    grant: { at: [0, -36.5], ability: 'echo' },
+    stones: [{ id: 'A', at: [-5, -42.5] }, { id: 'B', at: [-1.5, -49.5] }],
+    runes: [{ id: 'd', at: [-1.5, -56.5], stones: ['B'], tip: true, tol: 0.9, lat: 1.2, gate: 'g_L5', stele: false }],
+    ember: [0, -60.3],
+    barks: { grant: ['MARROW', 'You can leave a minute behind, Ilen. The temple will walk it for you.'] },
+    hints: ['Mark a minute where the light must be.', 'Your echo holds the road. Stand on your own past.'],
+    onComplete: { gates: [] },
     build(ctx) {
       platform(ctx, { x0: -12, x1: 12, z0: -44, z1: -32 });
       platform(ctx, { x0: -12, x1: 12, z0: -58, z1: -48 });
       wallX(ctx, -31.55, -12.9, 12.9, 6, [0], DOOR);
       for (const x of [-12.45, 12.45]) { wallZ(ctx, x, -44, -31.1, 6); wallZ(ctx, x, -58.9, -48, 6); }
       wallX(ctx, -58.45, -12.9, 12.9, 7, [0], G);
-      read(ctx, 'L5_hint', 9.5, -34, -0.9);
       pillar(ctx, -10.5, -36, { h: 9 }); pillar(ctx, 10.5, -42, { h: 9, broken: true });
       pillar(ctx, -10.5, -56, { h: 9, broken: true }); pillar(ctx, 10.5, -50, { h: 9 });
-      brazier(ctx, -10.5, -33.5); brazier(ctx, -10.5, -42.5); brazier(ctx, 10.5, -56.5);
+      // (the brazier that stood at (-10.5, -42.5) was within reach of stone A — removed: rule 1)
+      brazier(ctx, -10.5, -33.5); brazier(ctx, 10.5, -56.5);
     },
   },
   {

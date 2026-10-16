@@ -19,12 +19,19 @@ export function emberMesh(scale = 1) {
 }
 
 export class EmberPickup {
-  constructor(position) {
-    this.group = emberMesh(1.15);
+  constructor(position, { lost = false } = {}) {
+    this.group = emberMesh(lost ? 0.8 : 1.15);
     this.base = position.clone();
     this.group.position.copy(position);
-    this.light = new LightSource(COLORS.fire, 2.5, 4, 2);
-    this.group.add(this.light);
+    if (lost) {
+      // a Lost Minute: cyan-gold, no fire of its own (it must never cast a stone's shadow)
+      this.group.userData.core.material.color.set(COLORS.target).multiplyScalar(2);
+      this.group.userData.shell.material.color.set(COLORS.time).multiplyScalar(1.4);
+      this.group.userData.shell.material.opacity = 0.45;
+    } else {
+      this.light = new LightSource(COLORS.fire, 2.5, 4, 2);
+      this.group.add(this.light);
+    }
     this.collected = false;
     this.time = Math.random() * 10;
     this.radius = 1.0;

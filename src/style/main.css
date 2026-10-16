@@ -23,6 +23,9 @@ canvas#game { display: block; width: 100%; height: 100%; outline: none; }
 .vignette { position: absolute; inset: 0; pointer-events: none; opacity: 0; visibility: hidden; transition: opacity 0.25s ease, visibility 0s linear 0.25s; }
 #vignette-rewind { background: radial-gradient(ellipse at center, rgba(105,217,232,0) 40%, rgba(105,217,232,0.34) 100%); }
 #vignette-warn { background: radial-gradient(ellipse at center, rgba(255,90,40,0) 55%, rgba(255,90,40,0.25) 100%); }
+#vignette-rewind.faint.on { opacity: 0.45; }
+.ring-widget.echo .ring { stroke: var(--time); }
+.ring-widget.echo .ring-text { color: var(--time); }
 #vignette-rewind.on, #vignette-warn.on { opacity: 1; visibility: visible; transition-delay: 0s; }
 
 /* ---------- HUD ---------- */

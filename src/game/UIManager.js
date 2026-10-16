@@ -184,6 +184,18 @@ export class UIManager {
     this.el.time.classList.toggle('active', rewinding);
   }
 
+  /** Time: the minute being marked, then the echo's hold (reuses the #timer ring). */
+  echoRing(h) {
+    const lbl = this.el.timer.querySelector('.ring-label');
+    if (!h) { this.el.timer.classList.remove('echo'); this.el.vRewind.classList.remove('faint'); return; }
+    this.ring(this.el.timer, h.t / h.max, String(Math.max(0, Math.ceil(h.t))), h.warn, false);
+    this.el.timer.classList.add('echo');
+    if (lbl.textContent !== h.label) lbl.textContent = h.label;
+    this.el.vRewind.classList.toggle('on', h.label === 'MINUTE');
+    this.el.vRewind.classList.add('faint');
+    this.el.time.classList.add('active');
+  }
+
   /** HUD for rooms built on the five rules: no turning, no memory bar, no carried flame. */
   updateLightHUD(p, player, extraPrompt, objective) {
     let pr = null;
