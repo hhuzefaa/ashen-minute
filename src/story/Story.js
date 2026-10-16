@@ -80,6 +80,7 @@ export class Story {
     const step = s.steps[s.i];
     s.step = step;
     if (!step) { this.end(); return; }
+    if (step.if && !this.game.storyCondition(step.if)) { this.next(); return; }
     const ui = this.game.ui;
     const cam = this.game.cameraCtl;
     if (step.cam) {
@@ -127,7 +128,7 @@ export class Story {
     this.game.ui.hideDialogue();
     this.game.ui.hideCard();
     this.game.ui.fadeTo(0, 0.6);
-    if (id !== 'finale') this.game.exitCutscene();
+    if (id !== 'ending') this.game.exitCutscene();
   }
 
   update(dt, input) {

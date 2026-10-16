@@ -104,6 +104,35 @@ export class ShadowBridge {
     if (!on && this.state === BRIDGE.WARNING) this.state = BRIDGE.ACTIVE;
   }
 
+  /** Formed at once (loading a save / restarting the Unmaking). */
+  showImmediate() {
+    this.state = BRIDGE.ACTIVE;
+    this.t = 0;
+    for (const s of this.slabs) { s.visible = true; s.material.opacity = 1; s.material.transparent = false; s.position.y = s.userData.restY; }
+    this.seamMat.opacity = 1;
+    this._setCollider(this.slabs.length);
+    this.collider.enabled = true;
+  }
+
+  /** The Unmaking: slabs crumble one by one from the END (`rate` slabs/s); the walkable part shrinks with them. */
+  dissolve(rate = 1.2) {
+    if (this.state === BRIDGE.HIDDEN) return;
+    this.state = 'DISSOLVING';
+    this.t = 0;
+    this.dRate = rate;
+    for (const s of this.slabs) s.material.transparent = true;
+  }
+
+  _setCollider(k) {
+    const n = this.slabs.length, seg = this.length / n;
+    const c = this.collider;
+    if (k <= 0) { c.enabled = false; return; }
+    const lz = this.length / 2 - (k * seg) / 2; // local centre of the remaining slabs (start side)
+    const sn = Math.sin(this.yaw), cs = Math.cos(this.yaw);
+    c.cx = this.group.position.x + lz * sn; c.cz = this.group.position.z + lz * cs;
+    c.hz = (k * seg) / 2 + 0.05;
+  }
+
   hideImmediate() {
     this.state = BRIDGE.HIDDEN;
     this.collider.enabled = false;
@@ -139,6 +168,19 @@ export class ShadowBridge {
       this.slabs.forEach((s) => { s.material.opacity = 1 - f; s.position.y = s.userData.restY - f * 0.6; });
       this.seamMat.opacity = 1 - f;
       if (f >= 1) this.hideImmediate();
+    } else if (this.state === 'DISSOLVING') {
+      const gone = this.t * this.dRate;
+      for (let i = 0; i < n; i++) {
+        const rank = n - 1 - i; // the end slab goes first
+        const s = this.slabs[i];
+        const f = Math.min(1, Math.max(0, gone - rank));
+        s.material.opacity = 1 - f;
+        s.position.y = s.userData.restY - f * 2.5 + (f === 0 && gone > rank - 1 ? Math.sin(this.time * 40) * 0.02 : 0);
+        s.visible = f < 1;
+      }
+      this._setCollider(n - Math.min(n, Math.floor(gone + 0.25)));
+      this.seamMat.opacity = Math.max(0, 1 - gone / n);
+      if (gone >= n + 1) this.hideImmediate();
     } else if (this.state === BRIDGE.ACTIVE || this.state === BRIDGE.WARNING) {
       const warn = this.state === BRIDGE.WARNING;
       const p = warn ? 0.5 + 0.5 * Math.sin(this.time * 14) : 0.85 + 0.15 * Math.sin(this.time * 2.5);

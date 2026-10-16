@@ -149,6 +149,7 @@ export class LightPuzzle {
     this.game.effects.burst(b.pos, byHand ? 30 : 40, this.game.effects.c.hot, 2.4, 0.12, 0.9);
     this.progress();
     if (fresh) this.lightDecor();
+    if (b.reveal) this.game.world.revealLostMinute(b.reveal);
   }
 
   /** Rail stone: slide to the next slot (wraps). Its shadows recompute from the new base. */

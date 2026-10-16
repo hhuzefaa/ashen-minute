@@ -209,8 +209,11 @@ export const LEVELS = [
     // Introduce: walking swings the stone's shadow. Twist: it falls short of the rune until you
     // step BACK (a farther fire throws a longer shadow). Valid lantern zone: 4.1–9 m behind the
     // stone on the line rune→stone (all on the near platform).
-    stones: [{ id: 'A', at: [-1, 49], faceDeg: -15 }],
+    stones: [{ id: 'A', at: [-1, 49], faceDeg: -15 }, { id: 'L', at: [6.8, 42.5] }],
     runes: [{ id: 'a', at: [1.5, 39.5], stones: ['A'], bridge: { from: [0, 47.6], to: [0, 42.9] } }],
+    // Lost Minute 1: after crossing, the far corner's sconce throws stone L's shadow back over the gap
+    sconces: [{ id: 'lm', at: [6.5, 35.5] }],
+    lostMinutes: [{ id: 'lm1', at: [6.8, 45.2], y: 0.9 }],
     ember: [-4, 36.4],
     barks: { firstShadow: ['MARROW', 'Fire first, child. Where the fire stands, the shadow falls the other way.'] },
     hints: ['Where the fire stands, the shadow falls the other way.', 'A shadow grows as its fire steps back.'],
@@ -222,7 +225,7 @@ export const LEVELS = [
       wallX(ctx, 33.05, -9.9, 9.9, 7, [0], G);
       pillar(ctx, -7.4, 55, { h: 8 }); pillar(ctx, 7.4, 55, { h: 8, broken: true });
       pillar(ctx, -7.4, 41, { h: 8, broken: true }); pillar(ctx, 7.4, 41, { h: 8 });
-      brazier(ctx, -6.5, 59); brazier(ctx, 6.5, 59); brazier(ctx, -6.5, 35.5); brazier(ctx, 6.5, 35.5);
+      brazier(ctx, -6.5, 59); brazier(ctx, 6.5, 59); brazier(ctx, -6.5, 35.5); // (6.5, 35.5) is now a sconce
       rubble(ctx, -7.6, 48.5, 6); rubble(ctx, 7.8, 36.5, 5);
     },
   },
@@ -271,6 +274,8 @@ export const LEVELS = [
     stones: [{ id: 'A', at: [-55, -34.5] }, { id: 'B', at: [-51.5, -44.9] }],
     runes: [],
     sconces: [{ id: 'isl', at: [-51.5, -42.6], burn: 20 }],
+    // Lost Minute 3: ride Marrow's shadow as it swings west past the island, over the side of the gap
+    lostMinutes: [{ id: 'lm3', at: [-63.5, -38.5], y: 0.9 }],
     marrow: { path: [{ x: -64, z: -32, wait: 1 }, { x: -46, z: -32, wait: 1 }], speed: 1.6 },
     ember: [-62.5, -55],
     hints: ['Watch my rounds, child. The shadow comes to you.', 'Step on as it arrives. Step off before it leaves.'],
@@ -292,7 +297,10 @@ export const LEVELS = [
   {
     id: 4, numeral: '', name: 'The Measured Walk', rect: [-73, -37, -97, -66.5], v2: true, passage: true, openWith: 3,
     spawn: [-55, -68.5, 0],
-    stones: [], runes: [],
+    // Lost Minute 2: the far corner sconce throws stone M's shadow back over the chasm's west end
+    stones: [{ id: 'M', at: [-69, -85.5] }], runes: [],
+    sconces: [{ id: 'lm', at: [-70, -94] }],
+    lostMinutes: [{ id: 'lm2', at: [-68.5, -81.2], y: 0.9 }],
     bridges: [{ from: [-55, -77.4], to: [-55, -84.6] }],
     build(ctx) {
       platform(ctx, { x0: -72, x1: -38, z0: -78, z1: -67 });
@@ -302,7 +310,7 @@ export const LEVELS = [
       wallZ(ctx, -37.55, -78, -66.1, 6); wallZ(ctx, -37.55, -96.9, -84, 6, [-90], G);
       wallX(ctx, -96.45, -72.9, -37.1, 7);
       pillar(ctx, -70, -80.5, { h: 8, collide: false }); pillar(ctx, -40, -80.5, { h: 8, broken: true, collide: false });
-      brazier(ctx, -70, -68.5); brazier(ctx, -40, -68.5); brazier(ctx, -70, -94);
+      brazier(ctx, -70, -68.5); brazier(ctx, -40, -68.5); // (-70, -94) is now a sconce
     },
   },
   {
@@ -371,7 +379,11 @@ export const LEVELS = [
   {
     id: 7, numeral: '', name: 'The Crossroads', rect: [24, 50, -96, -55], v2: true, passage: true, openWith: 6,
     spawn: [26, -88, -Math.PI / 2],
-    stones: [], runes: [],
+    // Lost Minute 4: a three-sconce chain behind the balustrade — light the first with a shadow,
+    // and the fire runs stone to stone; the third reveals the fragment
+    stones: [{ id: 'P1', at: [28, -89.3] }, { id: 'P2', at: [34.5, -92.5] }, { id: 'P3', at: [41.5, -92.5] }], runes: [],
+    sconces: [{ id: 'c1', at: [31.5, -92.5], warded: true }, { id: 'c2', at: [38.5, -92.5], warded: true }, { id: 'c3', at: [45.5, -92.5], warded: true, reveal: 'lm4' }],
+    lostMinutes: [{ id: 'lm4', at: [45.5, -89.4], y: 0.9, hidden: true }],
     build(ctx) {
       platform(ctx, { x0: 24.5, x1: 49, z0: -95, z1: -62 });
       wallZ(ctx, 24.05, -95.9, -61.1, 6, [-88], DOOR);
@@ -379,6 +391,7 @@ export const LEVELS = [
       wallX(ctx, -95.45, 23.6, 49.9, 7);
       wallX(ctx, -61.55, 23.6, 49.9, 7, [33], G);
       wallX(ctx, -84, 38, 49, 4);
+      balustrade(ctx, { x0: 24.5, z0: -90.8, x1: 49, z1: -90.8 });
       brazier(ctx, 36, -80);
       pillar(ctx, 44, -66, { h: 8 }); pillar(ctx, 27, -80, { h: 8, broken: true });
     },
@@ -386,7 +399,11 @@ export const LEVELS = [
   {
     id: 8, numeral: '', name: 'The Clockwork Span', rect: [32, 62, -20, 16], v2: true, passage: true, openWith: 6,
     spawn: [33.5, 0, -Math.PI / 2],
-    stones: [], runes: [],
+    // Lost Minute 5: a rail stone and a tip rune across the chasm — only one slot leaves room
+    // behind the stone (inside the inner wall) for the lantern to stand at the right distance
+    stones: [{ id: 'T', rail: { from: [41.5, 10], to: [45.5, 10], slots: 3, start: 0, lever: [43.5, 12.6] } }],
+    runes: [{ id: 'lm5r', at: [55.5, 10], stones: ['T'], tip: true, tol: 0.7, stele: false, reveal: 'lm5' }],
+    lostMinutes: [{ id: 'lm5', at: [55.5, 10], y: 1.0, hidden: true }],
     bridges: [{ from: [46.4, -4], to: [53.6, -4] }],
     build(ctx) {
       platform(ctx, { x0: 32, x1: 47, z0: -15, z1: 15 });
@@ -419,6 +436,9 @@ export const LEVELS = [
     ],
     runes: [],
     sconces: [{ id: 'E', at: [65.5, 42], warded: true }],
+    // Lost Minute 6: an echo held at the island's south edge throws R's shadow along the second
+    // gap to the far north end — a walk over the abyss on your own past
+    lostMinutes: [{ id: 'lm6', at: [35.5, 56], y: 0.9 }],
     ember: [27, 55],
     onComplete: { gates: ['g_L9', 'g_sc_e'], story: 'ring_wakes' },
     build(ctx) {

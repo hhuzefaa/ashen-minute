@@ -128,6 +128,7 @@ export class World {
       b.lightId = 's:' + sc.id;
       b.relayT = 0;
       b.warded = !!sc.warded; // out of reach (grille / balustrade / abyss): only a shadow can light it
+      b.reveal = sc.reveal || null; // a Lost Minute appears when this fire first catches
       sconces.push(b);
     }
     let ember = null;

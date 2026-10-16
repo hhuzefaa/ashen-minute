@@ -67,10 +67,14 @@ export const SCENES = {
     { do: 'heartBackwards', wait: 1.5 },
     { cam: [0, 16, 26, 0, 3, 0], speed: 0.5 },
     { say: ['MARROW', 'Go home, Keeper.'] },
-    { do: 'ashRises', wait: 2.5 },
-    { fade: 1, dur: 2.5, color: '#f3e4cc' },
+    { do: 'unmakingStart' }, // the Unmaking: control returns; run before the shadows go home
+  ],
+  ending: [
+    { do: 'ashRises', wait: 1.2 },
+    { fade: 1, dur: 2.0, color: '#f3e4cc' },
     { card: ['', 'In Vael, a woman wakes and says her sister’s name.'], dur: 4 },
     { card: ['', 'In the temple, the shadows return to their stones.'], dur: 3.6 },
+    { card: ['', 'She remembers the smell of the old hearths, and does not know why.'], dur: 4, if: 'allLostMinutes' },
     { card: ['ASHEN MINUTES', 'The temple remembers, so that we may forget.'], dur: 4.4 },
     { do: 'victory' },
   ],

@@ -16,7 +16,7 @@ import { COLORS, glowTexture } from './Palette.js';
 import { World } from '../world/World.js';
 import { ROOM_COUNT } from '../world/levels.js';
 import { ShadowSystem } from './ShadowSystem.js';
-import { EchoSystem } from './Echo.js';
+import { EchoSystem, Ghost } from './Echo.js';
 import { lightMap } from './LightMap.js';
 import { Story } from '../story/Story.js';
 import { emberMesh } from '../objects/EmberPickup.js';
@@ -158,6 +158,8 @@ export class Game {
     this.audio.stopAllLoops();
     this.story.scene = null;
     this.echoes.clear();
+    this.unmaking = null;
+    if (this.doorMarrow) { this.doorMarrow.keeper.group.visible = false; this.doorMarrow.light.intensity = 0; }
     this.shadows.ilenActive = false;
     this.shadows.clear();
     this.titleT = 0;
@@ -324,6 +326,7 @@ export class Game {
     if (pl.hasSafe) pl.setSpawn(pl.lastSafe, pl.lastSafeYaw); // back to the last safe ground
     else { const cp = this.world.checkpoint; pl.setSpawn(new THREE.Vector3(cp.x, 0, cp.z), cp.yaw); }
     this.echoes.cancelRecording(); // falling cancels a minute being marked
+    if (this.unmaking) { this.restartUnmaking(); return; }
     this.falls = (this.falls || 0) + 1;
     this.lastFallAt = this.time;
     this.cameraCtl.snap(pl.spawnYaw, 0.3);
@@ -337,6 +340,7 @@ export class Game {
 
   restartPuzzle() {
     if (this.state !== STATE.PLAYING) return;
+    if (this.unmaking) { this.restartUnmaking(); return; }
     const p = this.world.activePuzzle;
     if (!p || (p.level.hub && !this.world.progress.data.completed.includes(9))) { this.respawn(); return; }
     this.ui.fadeTo(1, 0.25);
@@ -360,9 +364,14 @@ export class Game {
   }
 
   /** A released echo counts as progress in the room, and Ilen notices the first one. */
-  onEchoReleased() {
+  onEchoReleased(e) {
     this.world.activePuzzle?.onEchoReleased?.();
-    if (!this.story.seen('bark_first_echo')) { this.world.progress.mark('story', 'bark_first_echo'); this.story.say('ILEN', 'That’s me. Eight seconds ago.', 4.5); }
+    if (e?.permanent) {
+      // the minutes you leave (finale): these echoes never crumble
+      const n = this.echoes.echoes.filter((x) => x.permanent).length;
+      if (n === 1) this.story.say('ILEN', 'That one stays.', 3.5);
+      if (n === 2) this.story.say('ILEN', '…So does that one.', 3.5);
+    } else if (!this.story.seen('bark_first_echo')) { this.world.progress.mark('story', 'bark_first_echo'); this.story.say('ILEN', 'That’s me. Eight seconds ago.', 4.5); }
     this.world.progress.data.echoesMade = (this.world.progress.data.echoesMade || 0) + 1;
     this.world.progress.save();
   }
@@ -372,6 +381,7 @@ export class Game {
     const w = this.world;
     if (name === 'wakeRing') w.wakeRing(!skipping);
     else if (name === 'openingBarks') this.story.openingBarks();
+    else if (name === 'unmakingStart') this.startUnmaking();
     else if (name === 'embersConverge') {
       const from = this.player.keeper.lanternCore.getWorldPosition(new THREE.Vector3());
       this.finaleOrbs = [];
@@ -393,6 +403,58 @@ export class Game {
       this.world.progress.mark('completed', 10);
       this.showVictory();
     }
+  }
+
+  storyCondition(name) {
+    if (name === 'allLostMinutes') return this.world.progress.data.lostMinutes.length >= 6;
+    return true;
+  }
+
+  // ------------------------------------------------------------------ the Unmaking (escape)
+  /** "The shadows are returning to their stones": run from the island to the south gallery door. */
+  startUnmaking() {
+    const w = this.world;
+    this.unmaking = { t: 0, crackT: 0, dissolving: false, slept: 0 };
+    if (!this.doorMarrow) this.doorMarrow = new Ghost(this.scene, { marrow: true });
+    const g = this.doorMarrow;
+    g.place(0, 0, 21.4, 0);
+    g.keeper.animate(0, 0, true);
+    g.keeper.lanternPivot.rotation.x = 2.6;
+    g.keeper.group.visible = true;
+    g.light.intensity = 4;
+    w.finalBridge.showImmediate();
+    this.placePlayer(0, -2.2, 0);
+    this.setWarmth(10);
+    this.audio.setWarmth(3);
+    this.ashRising = 60;
+  }
+
+  updateUnmaking(dt) {
+    const u = this.unmaking, w = this.world;
+    u.t += dt;
+    if (!u.dissolving && u.t > 1.2) { u.dissolving = true; w.finalBridge.dissolve(1.2); this.audio.play('sfx_bridge_fade'); }
+    // the ring's shadows go home one by one: rail stone first, then west, then east
+    const order = ['S', 'W', 'E'];
+    while (u.slept < 3 && u.t > 0.6 + u.slept * 1.6) {
+      const st = w.l10.stoneById.get(order[u.slept++]);
+      st.awake = false;
+      this.audio.play('sfx_shadow_crack');
+    }
+    u.crackT -= dt;
+    if (u.crackT <= 0) { u.crackT = 1.1 + Math.random() * 0.8; this.audio.play('sfx_shadow_crack'); this.cameraCtl.shake(0.04, 0.3); }
+    const p = this.player.pos;
+    if (Math.hypot(p.x, p.z - 21.4) < 1.8) this.endUnmaking();
+  }
+
+  /** Falling in the Unmaking restarts only the escape, from the island. */
+  restartUnmaking() {
+    for (const st of this.world.l10.stones) st.awake = true;
+    this.startUnmaking();
+  }
+
+  endUnmaking() {
+    this.unmaking = null;
+    this.story.play('ending');
   }
 
   updateFinaleFX(dt) {
@@ -508,11 +570,12 @@ export class Game {
     this.player.keeper.group.visible = !this.cameraCtl.tooClose;
     // 4. world: rooms, gates, triggers
     this.world.update(dt, input, this.player, this.cameraCtl, true);
+    if (this.unmaking) { this.updateUnmaking(dt); this.updateFinaleFX(dt); }
     const cur = this.world.activePuzzle;
-    this.ui.updateHUD(cur, this.player, this.objectiveText(cur));
+    this.ui.updateHUD(this.unmaking ? null : cur, this.player, this.unmaking ? '' : this.objectiveText(cur));
     this.ui.echoRing(this.echoes.hud);
     const ringAwake = this.world.ringAwake;
-    this.ui.setLevelName(!cur ? '' : cur.level.hub ? (ringAwake ? cur.level.name : 'The Sanctuary of Minutes') : cur.passage ? '' : `${cur.level.numeral} · ${cur.level.name}`);
+    this.ui.setLevelName(!cur || this.unmaking ? '' : cur.level.hub ? (ringAwake ? cur.level.name : 'The Sanctuary of Minutes') : cur.passage ? '' : `${cur.level.numeral} · ${cur.level.name}`);
     if (input.wasPressed('KeyE') && !cur?.prompt0) this.ui.hideReading();
   }
 

@@ -149,6 +149,8 @@ with sync_playwright() as pw:
         adv(1.0)  # a fall takes ~0.8 s to register
         return ev('window.__falls') == f0, ev(f'[{S}.player.pos.x, {S}.player.pos.z, {S}.player.grounded]')
 
+    def lost(i): return ev(f'{S}.world.progress.data.lostMinutes.includes("lm{i}")')
+
     def level_done(i): return ev(f'{S}.world.progress.data.completed.includes({i})')
 
     def skip_scene():
@@ -224,7 +226,7 @@ with sync_playwright() as pw:
     rw = ev(f'{S}.world.ruleWarnings')
     check('rule 1 is truthful: no decorative fire within reach of any stone', len(rw) == 0, '; '.join(rw))
     lm = ev(f'{S}.debug.lightMap(1)')
-    check('L1 light map: rune a wakes only from a zone behind the stone', lm['runes']['a']['valid'] > 5 and lm['runes']['a']['wrong'] == 0, f"{lm['runes']['a']['valid']} samples, zone {lm['runes']['a']['zone']}")
+    check('L1 light map: rune a wakes only from a zone behind the stone', lm['runes']['a']['valid'] > 5 and lm['runes']['a']['zone'][2] > 52, f"{lm['runes']['a']['valid']} samples, zone {lm['runes']['a']['zone']}")
     # rune→stone line: the lantern must stand on its far side, 4.1–9 m behind the stone
     st = ev(f'(() => {{ const b={P}.stoneById.get("A").base, r={P}.runes.get("a").pos; return [b.x, b.z, r.x, r.z]; }})()')
     ux, uz = st[2] - st[0], st[3] - st[1]; L = math.hypot(ux, uz); ux, uz = ux / L, uz / L
@@ -251,6 +253,13 @@ with sync_playwright() as pw:
     adv(1.0)
     shot('11_L1_bridge')
     ok, far = walk_bridge('a'); check('L1 bridge walked', ok, f'{far:.2f}')
+    # Lost Minute 1: the far corner's sconce throws stone L's shadow back over the gap
+    check('LM1 kindle the far-corner sconce', kindle('lm')); adv(0.6)
+    sh = shadow_of('L', 's:lm')
+    stand_at(sh['bx'] + sh['ux'] * 1.2, sh['bz'] + sh['uz'] * 1.2, math.atan2(-sh['ux'], -sh['uz']))
+    walk_to(6.8, 45.2, 5); adv(0.3)
+    check('LM1 found on the shadow over the gap (reading panel shows the memory)', lost(1) and ev('document.getElementById("reading").classList.contains("hidden") === false'))
+    walk_to(sh['bx'] + sh['ux'] * 1.2, sh['bz'] + sh['uz'] * 1.2, 5)
     grab_ember(); adv(1.0)
     check('L1 complete; gates open', level_done(1) and ev(f'{S}.world.gates.get("g_L1").isOpen'))
     adv(3)
@@ -366,6 +375,14 @@ with sync_playwright() as pw:
     down('ShiftLeft'); d = walk_to(-55, -42.0, 4); up('ShiftLeft'); adv(1.0)
     pos = ev(f'[{S}.player.pos.x, {S}.player.pos.z, {S}.player.grounded]')
     check('III crossed onto the island on Marrow\'s shadow', ev('window.__falls') == f0 and pos[1] < -40.2 and pos[2], f'({pos[0]:.1f}, {pos[1]:.1f}) falls +{ev("window.__falls") - f0}')
+    # Lost Minute 3 lies where Marrow's swing carries her shadow past the island's west edge
+    ok = wait_until(f'''(() => {{ const s={P}.stoneById.get("A").shadows.get("marrow"); if (!s || !s.alive) return false;
+        const dx=-63.5-s.stone.base.x, dz=-38.5-s.stone.base.z, al=dx*s.ux+dz*s.uz; return al > 0.7 && al < s.len && Math.abs(-dx*s.uz+dz*s.ux) < 0.45; }})()''', w['cycle'] + 2, 1/30)
+    check('LM3 Marrow\'s swing passes over the fragment beyond the island', ok)
+    stand_at(-63.5, -38.5); adv(0.1)
+    check('LM3 found riding her shadow (standing on it there)', lost(3))
+    adv(1.5)
+    stand_at(-55, -43, 0); adv(0.3)
     check('III kindle the island sconce', kindle('isl'))
     adv(0.6)
     ok, pos = walk_shadow('B', 's:isl', 1.2, None, 1.5)
@@ -381,6 +398,12 @@ with sync_playwright() as pw:
     check('walk through the Room III gate into the west passage', ev(f'{P} && {P}.level.id') == 4 and ev(f'{P}.passage'), f'{d:.2f}')
     check('passage bridge already formed', ev(f'{P}.bridges[0].collider.enabled'))
     ok, far = walk_bridge_obj(f'{P}.bridges[0]'); check('passage bridge walked', ok, f'{far:.2f}')
+    check('LM2 kindle the far-corner sconce', kindle('lm')); adv(0.6)
+    sh = shadow_of('M', 's:lm')
+    stand_at(sh['bx'] + sh['ux'] * 1.2, sh['bz'] + sh['uz'] * 1.2, math.atan2(-sh['ux'], -sh['uz']))
+    walk_to(-68.5, -81.2, 5); adv(0.3)
+    check('LM2 found on the shadow over the chasm', lost(2))
+    walk_to(sh['bx'] + sh['ux'] * 1.2, sh['bz'] + sh['uz'] * 1.2, 5); walk_to(-55, -88, 8)
     for (x, z) in ((-40, -90), (-31, -90), (-31, -16), (-20, -16)):
         d = walk_to(x, z, 30, sprint=True)
     check('shortcut corridor leads back into the hub', ev(f'{S}.player.pos.x') > -22 and ev(f'{S}.player.pos.z') < -10, f'{ev(f"[{S}.player.pos.x,{S}.player.pos.z]")}')
@@ -429,6 +452,8 @@ with sync_playwright() as pw:
     # ===================================================================== V · The Fire Road (rule 4: relays)
     walk_to(0, -56, 6); walk_to(0, -60.5, 6); d = walk_to(-1, -64, 6)
     check('walk through the Room IV door to Room V', ev(f'{P} && {P}.level.id') == 6, f'{d:.2f}')
+    lm = ev(f'{S}.debug.lightMap(6)')
+    check('V light map: no reachable floor lets Ilen wake the door rune herself', lm['runes']['g']['reachable'] == 0 and lm['runes']['g']['valid'] > 0)
     stand_at(-9.4, -75.3, 0); adv(0.2)
     check('V the gallery sconces cannot be kindled by hand (no prompt at the balustrade)', not ev(f'{P}.prompt0 && {P}.prompt0.type === "sconce"') and not any(ev(f'{P}.sconces.map(b => b.lit)')))
     # sweep stone W's shadow across the gallery: walk east of W from north to south
@@ -467,6 +492,13 @@ with sync_playwright() as pw:
     # ===================================================================== passages (old VII, VIII) to Room VI
     walk_to(16, -88, 6); walk_to(21, -88, 6); d = walk_to(27, -88, 6)
     check('walk through the Room V gate into the north passage', ev(f'{P} && {P}.level.id') == 7, f'{d:.2f}')
+    lm = ev(f'{S}.debug.lightMap(7)')
+    check('LM4 light map: only the first sconce of the chain is reachable by Ilen\'s shadow', lm['ilenRelayReachable']['c1'] > 0 and lm['ilenRelayReachable']['c2'] == 0 and lm['ilenRelayReachable']['c3'] == 0, str(lm['ilenRelayReachable']))
+    lantern_at(25.8, -87.3, math.pi * 0.75); adv(0.2)
+    ok = wait_until(f'{sconce("c3")}.lit', 6)
+    check('LM4 one shadow lights the first sconce and the fire runs the chain', ok and ev(f'{sconce("c1")}.lit && {sconce("c2")}.lit'))
+    walk_to(44.5, -89.4, 8); walk_to(45.5, -89.4, 3); adv(0.3)
+    check('LM4 the chain reveals the fragment', lost(4))
     walk_to(37, -87.5, 8); walk_to(33, -82, 8); walk_to(33, -64, 8); walk_to(33, -57.6, 6)
     for (x, z) in ((33, -31), (16, -31), (16, -18)):
         walk_to(x, z, 30, sprint=True)
@@ -475,7 +507,16 @@ with sync_playwright() as pw:
     d = walk_to(33.5, 0, 8)
     check('walk through the east gate into the east passage', ev(f'{P} && {P}.level.id') == 8, f'{d:.2f}')
     walk_to(38.5, 4, 6); walk_to(42, 4, 6); walk_to(44, -4, 6)
+    walk_to(43.5, 11.4, 6); press('KeyE'); adv(1.3); press('KeyE'); adv(1.3)
+    check('LM5 the rail stone slid to the slot by the chasm', abs(ev(f'{P}.stoneById.get("T").base.x') - 45.5) < 0.05)
+    lantern_at(41.25, 10.0, -math.pi / 2); adv(0.2)
+    ok = wait_until(f'{P}.runes.get("lm5r").lit', 3, 1/30)
+    check('LM5 from just inside the inner wall, the shadow tip lands on the rune across the chasm', ok)
+    walk_to(44, -4, 8)
     ok, far = walk_bridge_obj(f'{P}.bridges[0]'); check('east passage bridge walked', ok, f'{far:.2f}')
+    walk_to(55.5, 9.5, 8); walk_to(55.5, 10, 3); adv(0.3)
+    check('LM5 found across the chasm', lost(5))
+    walk_to(57, 8, 6)
 
     # ===================================================================== VI · The Mirror Hall (quiet: relay + rail + echo)
     walk_to(57, 13, 8); walk_to(57, 18, 6); d = walk_to(57, 28.5, 10)
@@ -490,11 +531,22 @@ with sync_playwright() as pw:
     lever = ev(f'{P}.stoneById.get("R").rail.lever')
     stand_at(lever[0] + 0.6, lever[1] - 0.6); press('KeyE'); adv(1.3)
     check('VI rail: R slides to the island\'s edge', abs(ev(f'{P}.stoneById.get("R").base.x') - 39.2) < 0.05)
+    # Lost Minute 6: an echo held at the island's south edge throws R's shadow along the second gap
+    stand_at(42.2, 35.45, math.pi / 2)
+    press('KeyR'); walk_to(41.16, 35.45, 3); adv(0.2); press('KeyR')
+    wait_until(f'{S}.echoes.echoes[0] && {S}.echoes.echoes[0].state === "hold"', 6)
+    sh = ev(f'(() => {{ const s=[...{P}.stoneById.get("R").shadows.values()].find(s => s.kind === "echo"); return s && {{ len: s.len, ux: s.ux, uz: s.uz, bx: s.stone.base.x, bz: s.stone.base.z }}; }})()')
+    stand_at(sh['bx'] + sh['ux'] * 1.2, sh['bz'] + sh['uz'] * 1.2, math.atan2(-sh['ux'], -sh['uz']))
+    walk_to(35.5, 56, 6); adv(0.3)
+    check('LM6 found at the end of the echo-held shadow over the abyss', lost(6), str(sh))
+    adv(14)  # the echo crumbles; fall and come back to the island
+    check('Lost Minutes 6/6 collected', ev(f'{S}.world.progress.data.lostMinutes.length') == 6)
     stand_at(44.6, 42, math.pi / 2)
     press('KeyR'); walk_to(43.6, 42, 3); adv(0.2); press('KeyR')
     ok = wait_until(f'{S}.echoes.echoes[0] && {S}.echoes.echoes[0].state === "hold"', 6)
     sh = ev(f'(() => {{ const s=[...{P}.stoneById.get("R").shadows.values()].find(s => s.kind === "echo"); return s && {{ len: s.len, tipx: s.stone.base.x + s.ux * s.len }}; }})()')
     check('VI the echo holds R\'s shadow across the second gap', ok and sh and sh['tipx'] < 32.5, str(sh))
+    f0 = ev('window.__falls')
     stand_at(38.2, 42, math.pi / 2)
     d = walk_to(30.5, 42, 6); adv(1.0)
     pos = ev(f'[{S}.player.pos.x, {S}.player.pos.z, {S}.player.grounded]')
@@ -535,7 +587,23 @@ with sync_playwright() as pw:
     for _ in range(40):
         if ev(f'{S}.state') != 'cutscene': break
         press('Space'); adv(1.0)
+    check('the Unmaking: control returns after "Go home, Keeper."', ev(f'{S}.state') == 'playing' and ev(f'!!{S}.unmaking'))
+    check('the two permanent echoes are still there', ev(f'{S}.echoes.echoes.filter(e => e.permanent && e.ghost.keeper.group.visible).length') == 2)
+    # a fall restarts only the escape, from the island
+    ev(f'{S}.player.pos.set(-8, 0, 0); {S}.player.vel.set(0,0,0)'); adv(1.5)
+    check('a fall in the Unmaking restarts the escape on the island', ev(f'!!{S}.unmaking') and abs(ev(f'{S}.player.pos.z') + 2.2) < 0.6 and ev(f'{S}.unmaking.t') < 1.2)
+    t0 = ev(f'{S}.time')
+    walk_to(0, -14, 6, sprint=True)
+    check('the final bridge dissolves from the island outward behind you', ev(f'{S}.world.finalBridge.state') in ('DISSOLVING', 'HIDDEN'))
+    for (x, z) in ((-16.5, -16.5), (-16.5, 18.5), (0, 20.5)): walk_to(x, z, 15, sprint=True)
+    adv(0.5)
+    check('the ring\'s shadows went home', ev(f'{S}.world.l10.stones.every(s => !s.awake)'))
+    check('reaching Marrow at the gallery door ends the escape', ev(f'{S}.state') == 'cutscene' and ev(f'{S}.story.scene && {S}.story.scene.id') == 'ending', f'{ev(f"{S}.time") - t0:.1f}s')
+    for _ in range(40):
+        if ev(f'{S}.state') != 'cutscene': break
+        adv(1.0)
     check('finale reaches victory', ev(f'{S}.state') == 'victory', ev(f'{S}.state'))
+    check('victory stats list minutes left behind and Lost Minutes', 'Lost Minutes 6/6' in ev('document.getElementById("victory-stats").textContent'))
     check('six rooms restored', ev(f'{S}.world.roomsDone') == 6)
     shot('31_victory')
 
