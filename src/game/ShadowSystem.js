@@ -76,7 +76,30 @@ export class ShadowSystem {
     this._o = { yaw: 0, len: 0, ux: 0, uz: 0, d: 0 };
     this.ilenActive = false;
     this.playerOnShadow = null;
-    this.extraLights = [];       // { id, kind, pos } registered by echoes etc. (later phases)
+    this.extraLights = [];       // { id, kind, pos } registered by echoes and Marrow
+    // Focus (hold Q): faint previews of where each unlit sconce would cast if kindled
+    this.focus = false;
+    this.previews = [];
+    for (let i = 0; i < 6; i++) this.previews.push(new ShadowView(this.root, { preview: true }));
+    this._po = { yaw: 0, len: 0, ux: 0, uz: 0, d: 0 };
+  }
+
+  updatePreviews() {
+    let n = 0;
+    const p = this.game.world.activePuzzle;
+    if (this.focus && p) {
+      const pulse = 0.55 + 0.35 * Math.sin(this.game.time * 5);
+      for (const sc of p.sconces) {
+        if (sc.lit) continue;
+        for (const st of p.stones) {
+          if (n >= this.previews.length) break;
+          if (st.dormant && !st.awake) continue;
+          if (!ShadowSystem.compute(this.game.collision, st.base, sc.pos.x, sc.pos.z, this._po, this._a, this._b)) continue;
+          this.previews[n++].set(st.base, this._po.yaw, SHADOW.START, this._po.len, 0.35 * pulse, RIM.sconce, 0.6);
+        }
+      }
+    }
+    for (let i = n; i < this.previews.length; i++) this.previews[i].hide();
   }
 
   // ------------------------------------------------------------------ lights + stones
@@ -178,7 +201,7 @@ export class ShadowSystem {
       }
       if (s.strength <= 0) { this.release(s, i); continue; }
       const flicker = s.alive ? 1 : 0.55 + 0.45 * Math.abs(Math.sin(this.game.time * 22));
-      s.boost = Math.max(0, s.boost - dt * 2);
+      s.boost = Math.max(this.focus ? 0.8 : 0, s.boost - dt * 2);
       this.views[s.idx].set(s.stone.base, s.yaw, SHADOW.START, s.len, s.strength * flicker, RIM[s.kind] || RIM.sconce, s.boost);
       const c = this.colliders[s.idx];
       const half = (s.len + SHADOW.TIP - SHADOW.START) / 2;
@@ -188,6 +211,7 @@ export class ShadowSystem {
       c.enabled = true;
     }
     this.carry(dt);
+    this.updatePreviews();
   }
 
   /** Is Ilen's lantern casting a shadow of a stone within `r` m of p? (camera assist) */

@@ -500,6 +500,7 @@ export class Game {
     this.echoes.update(dt);
     // 2b. light: every fire casts every nearby stone's shadow (Ilen's lantern is a fire)
     this.shadows.ilenActive = true;
+    this.shadows.focus = input.isDown('KeyQ');
     this.shadows.update(dt);
     // 3. camera (assist: near a stone Ilen is shadowing, look down at the floor a little more)
     this.cameraCtl.assistTarget = this.shadows.ilenNear(this.player.pos, 7) ? 1 : 0;

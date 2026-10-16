@@ -214,6 +214,13 @@ with sync_playwright() as pw:
     # ===================================================================== L1 · The Threshold (rules 1 + 3)
     teleport(0, 58, 0)
     check('L1 entered (active puzzle is a light room)', ev(f'{P} && {P}.level.id') == 1 and ev(f'{P}.isLight'))
+    f0 = ev('window.__falls')
+    stand_at(0, 52, 0); down('ShiftLeft'); down('KeyW')
+    for _ in range(90):
+        adv(1/30)
+        if ev(f'!{S}.player.grounded'): break   # ran off the edge: coyote window
+    press('Space', 1/30); up('KeyW'); up('ShiftLeft'); adv(1.5)
+    check('no gap can be hopped: a running coyote hop across Room I\'s 3.5 m gap falls', ev('window.__falls') == f0 + 1)
     rw = ev(f'{S}.world.ruleWarnings')
     check('rule 1 is truthful: no decorative fire within reach of any stone', len(rw) == 0, '; '.join(rw))
     lm = ev(f'{S}.debug.lightMap(1)')
@@ -262,6 +269,13 @@ with sync_playwright() as pw:
     for (x, z) in ((-10, 15), (-17, 14), (-17, 0), (-30, 0)): walk_to(x, z, 12, sprint=True)
     d = walk_to(-36, 0, 6)
     check('walk through the hub west gate to L2', d < 1.0 and ev(f'{P} && {P}.level.id') == 2, f'{d:.2f}')
+    ev(f'window.__said = []; (() => {{ const st={S}.story, o=st.say.bind(st); st.say = (a, b, c) => {{ window.__said.push(b); o(a, b, c); }}; }})()')
+    stand_at(-37, 6, math.pi / 2); adv(62)
+    check('II hints on demand: Marrow speaks after 60 s without progress', any('cannot walk the road' in x for x in ev('window.__said')), str(ev('window.__said'))[:120])
+    down('KeyQ'); adv(0.3)
+    nprev = ev(f'{S}.shadows.previews.filter(v => v.group.visible).length')
+    up('KeyQ'); adv(0.2)
+    check('II focus (hold Q) previews where the unlit sconces would cast', nprev >= 2, f'{nprev} previews')
     # the naive attempt: walk toward the far end of your own shadow lying across the chasm
     stand_at(-38, 1.5, math.pi / 2); adv(0.5)
     sh = shadow_of('A', 'ilen')

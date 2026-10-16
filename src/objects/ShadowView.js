@@ -15,8 +15,9 @@ function geos() {
 }
 
 export class ShadowView {
-  constructor(parent) {
+  constructor(parent, { preview = false } = {}) {
     geos();
+    this.preview = preview;
     this.group = new THREE.Group();
     this.group.visible = false;
     parent.add(this.group);
@@ -50,8 +51,8 @@ export class ShadowView {
     this.sideL.scale.z = L; this.sideL.position.set(-W / 2, 0.003, mid);
     this.sideR.scale.z = L; this.sideR.position.set(W / 2, 0.003, mid);
     this.tipRim.scale.set(W, 1, W); this.tipRim.position.set(0, 0.003, -len);
-    this.coreMat.opacity = 0.86 * strength;
-    this.softMat.opacity = 0.32 * strength;
+    this.coreMat.opacity = (this.preview ? 0.3 : 0.86) * strength;
+    this.softMat.opacity = (this.preview ? 0 : 0.32) * strength;
     this.rimMat.color.copy(rimColor).multiplyScalar(0.9 + rimBoost * 1.6);
     this.rimMat.opacity = Math.min(1, strength * (0.55 + rimBoost * 0.45));
   }

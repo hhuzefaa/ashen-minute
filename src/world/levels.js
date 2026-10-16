@@ -213,6 +213,7 @@ export const LEVELS = [
     runes: [{ id: 'a', at: [1.5, 39.5], stones: ['A'], bridge: { from: [0, 47.6], to: [0, 42.9] } }],
     ember: [-4, 36.4],
     barks: { firstShadow: ['MARROW', 'Fire first, child. Where the fire stands, the shadow falls the other way.'] },
+    hints: ['Where the fire stands, the shadow falls the other way.', 'A shadow grows as its fire steps back.'],
     onComplete: { gates: ['g_L1', 'g_hub_w'] },
     build(ctx) {
       platform(ctx, { x0: -9, x1: 9, z0: 47, z1: 62 });
@@ -237,6 +238,7 @@ export const LEVELS = [
     sconces: [{ id: 'near', at: [-40.8, -1.5], burn: 20 }, { id: 'far', at: [-36.5, 4.5], burn: 20 }],
     ember: [-57.6, -9.6],
     barks: { ownFall: ['ILEN', 'I can’t stand where the light has to be.'], sconceHold: ['MARROW', 'A Keeper never carries every fire herself.'] },
+    hints: ['You cannot walk the road your own fire draws.', 'Leave a flame behind the stone. Choose the one that reaches.'],
     onComplete: { gates: ['g_L2'] },
     build(ctx) {
       platform(ctx, { x0: -46, x1: -34, z0: -12, z1: 12 });

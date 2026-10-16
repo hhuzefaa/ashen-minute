@@ -2,11 +2,11 @@ import * as THREE from 'three';
 import { Keeper } from '../objects/Keeper.js';
 
 // Camera-relative movement, simple cylinder collision, grounded/fall state (doc §3.3, §12.1).
-const SPEED = 3.7;
+const SPEED = 4.4;
 const ACCEL = 16;
 const DECEL = 20;
 const GRAVITY = 22;
-const JUMP_V = 5.6;
+const JUMP_V = 5.2;   // a hop, not a leap: no gap in the temple can be jumped
 const RADIUS = 0.34;
 const HEIGHT = 1.7;
 const STEP = 0.4;
@@ -75,7 +75,7 @@ export class PlayerController {
     const len = Math.hypot(wx, wz);
     if (len > 1) { wx /= len; wz /= len; } // diagonal is never faster
 
-    const spd = SPEED * (opts.sprint ? 1.7 : 1);
+    const spd = SPEED * (opts.sprint ? 1.6 : 1);
     const tx = wx * spd, tz = wz * spd;
     const k = 1 - Math.exp(-(len > 0.01 ? ACCEL : DECEL) * dt);
     const airK = this.grounded ? 1 : 0.35;
@@ -88,6 +88,9 @@ export class PlayerController {
     else this.jumpBuffer = Math.max(0, this.jumpBuffer - dt);
     if (opts.canMove && this.jumpBuffer > 0 && this.coyote > 0 && this.vel.y <= 0.01) {
       this.vel.y = JUMP_V;
+      // hops never carry a run: horizontal speed is capped at walking pace when leaving the floor
+      const hv = Math.hypot(this.vel.x, this.vel.z);
+      if (hv > SPEED) { this.vel.x *= SPEED / hv; this.vel.z *= SPEED / hv; }
       this.grounded = false;
       this.coyote = 0;
       this.jumpBuffer = 0;
