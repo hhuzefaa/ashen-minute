@@ -81,8 +81,10 @@ export class ShadowGuide {
     this.rotor.add(this.focusLine);
 
     // echo (Room 2/3 hint): a faint cyan copy at a remembered yaw
-    this.echoMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(COLORS.time).multiplyScalar(0.8), transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
-    this.echo = new THREE.Mesh(geo, this.echoMat);
+    this.echoMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(COLORS.time).multiplyScalar(0.35), transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
+    this.echoRimMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(COLORS.time).multiplyScalar(1.1), transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, toneMapped: false, blending: THREE.AdditiveBlending });
+    this.echo = new THREE.Group();
+    this.echo.add(new THREE.Mesh(geo, this.echoMat), new THREE.Mesh(ribbon(edgePts, 0.05), this.echoRimMat));
     this.echo.position.y = 0.01;
     this.echoYaw = null;
     this.echoOn = false;
@@ -129,7 +131,7 @@ export class ShadowGuide {
     const pulse = 0.5 + 0.5 * Math.sin(this.time * (4 + alignment * 8));
     const edgeCol = solved ? COLORS.target : rewinding ? COLORS.time : COLORS.fire;
     this.edgeMat.color.set(edgeCol).multiplyScalar(0.9 + alignment * 1.6 + (solved ? 0.6 : 0));
-    this.edgeMat.opacity = v * (0.55 + alignment * 0.35 + pulse * 0.1);
+    this.edgeMat.opacity = v * (solved ? 0.2 : 0.55 + alignment * 0.35 + pulse * 0.1);
     this.endMat.color.set(solved ? COLORS.target : rewinding ? COLORS.time : COLORS.fire).multiplyScalar(1.2 + alignment * 2 + pulse * 0.6);
     this.endMat.opacity = v;
     this.endpoint.rotation.y += dt * 2;
@@ -137,7 +139,8 @@ export class ShadowGuide {
     this.focusMat.opacity += ((focus && lit ? 0.9 : 0) - this.focusMat.opacity) * Math.min(1, dt * 10);
     // echo
     const echoTarget = this.echoOn && lit && !solved && this.echoYaw !== null ? 0.22 + 0.1 * Math.sin(this.time * 2.2) : 0;
-    this.echoMat.opacity += (echoTarget - this.echoMat.opacity) * Math.min(1, dt * 3);
+    this.echoRimMat.opacity += (echoTarget * 2.2 - this.echoRimMat.opacity) * Math.min(1, dt * 3);
+    this.echoMat.opacity = this.echoRimMat.opacity * 0.25;
     if (this.echoYaw !== null) this.echo.rotation.y = this.echoYaw;
     // trail
     const tOn = (this.trailOn || focus) && lit ? (rewinding ? 0.9 : 0.45) : 0;

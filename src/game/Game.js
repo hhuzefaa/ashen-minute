@@ -200,6 +200,7 @@ export class Game {
   showVictory() {
     this.state = STATE.VICTORY;
     this.input.exitLock();
+    this.ui.el.flash.classList.remove('show');
     this.ui.setVictoryStats((performance.now() - this.levels.runStart) / 1000, this.levels.totalRewinds);
     this.ui.show('victory');
   }

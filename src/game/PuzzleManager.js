@@ -240,6 +240,7 @@ export class PuzzleManager {
         this.rewinding = true;
         this.usedRewind = true;
         this.stats.rewinds++;
+        if (this.flash && this.flash.text === PROMPTS.rewindHint) this.flash = null;
         audio.startLoop('sfx_time_rewind');
       } else if (input.wasPressed('KeyR')) {
         this.showFlash(PROMPTS.noMemory, 'cyan', 1.4);
