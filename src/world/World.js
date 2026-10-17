@@ -12,6 +12,7 @@ import { LightPuzzle, railPoint } from '../game/LightPuzzle.js';
 import { SHADOW } from '../game/ShadowSystem.js';
 import { Progress } from './Progress.js';
 import { FEATURES } from '../game/Features.js';
+import { TUTORIAL_ZONES, TUTORIAL_LEVELS, TUTORIAL_GATES } from './tutorial.js';
 
 // The whole temple, built once and kept alive for the entire game. Progress (opened gates,
 // restored rooms, story beats, discoveries, Lost Minutes) persists in localStorage.
@@ -29,7 +30,7 @@ export class World {
     this.lightPuzzles = this.puzzles; // every room is a light room now
     this.lostMinutes = [];
     this.levelById = new Map();
-    this.progress = new Progress();
+    this.progress = new Progress(new Set(LEVELS.map((L) => L.id)), LEVELS.find((L) => L.hub)?.id);
     this.activePuzzle = null;
     this.checkpoint = { x: 0, z: 75.5, yaw: 0 };
     this.l10 = null;
@@ -40,7 +41,8 @@ export class World {
   build() {
     if (this._built) return;
     this._built = true;
-    for (const zd of ZONES) {
+    // the story's temple, then the training court (the optional tutorial, far out in the void)
+    for (const zd of [...ZONES, ...TUTORIAL_ZONES]) {
       const z = this.makeZone(zd.key, zd.rect);
       zd.build(z.ctx);
       if (zd.key === 'hub') {
@@ -51,11 +53,13 @@ export class World {
       }
     }
     // gates live in whichever zone contains them (for culling); default to the hub
-    for (const gd of GATES) {
+    for (const gd of [...GATES, ...TUTORIAL_GATES]) {
       const zone = this.zones.find((z) => inRect(z.rect, gd.x, gd.z, 1)) || this.hubZone;
-      this.gates.set(gd.id, new Gate(zone.ctx, gd));
+      const gate = new Gate(zone.ctx, gd);
+      gate.tutorial = !!gd.tutorial; // a training-court gate: never saved
+      this.gates.set(gd.id, gate);
     }
-    for (const L of LEVELS) this.buildLevel(L);
+    for (const L of [...LEVELS, ...TUTORIAL_LEVELS]) this.buildLevel(L);
     this.checkRuleTruth();
     this.applyProgress();
   }
@@ -228,7 +232,10 @@ export class World {
   /** Gates, restored rooms, passages and hub warmth from the saved progress (no animations). */
   applyProgress() {
     const pr = this.progress.data;
-    for (const g of this.gates.values()) g.setOpenInstant(pr.gates.includes(g.id) || !!GATES.find((d) => d.id === g.id).open);
+    for (const g of this.gates.values()) {
+      if (g.tutorial) { g.setOpenInstant(false); continue; } // the court's gates belong to the court
+      g.setOpenInstant(pr.gates.includes(g.id) || !!GATES.find((d) => d.id === g.id).open);
+    }
     for (const p of this.puzzles) {
       if (pr.completed.includes(p.level.id) && !p.level.hub) p.applyCompleted();
       if (p.passage) this.openPassage(p, pr.completed.includes(p.level.openWith), false);
@@ -267,7 +274,7 @@ export class World {
   openGate(id, animate = true) {
     const g = this.gates.get(id);
     if (!g) return;
-    if (!this.progress.data.gates.includes(id)) { this.progress.data.gates.push(id); this.progress.save(); }
+    if (!g.tutorial && !this.progress.data.gates.includes(id)) { this.progress.data.gates.push(id); this.progress.save(); }
     if (g.isOpen) return;
     if (animate) { g.open(); this.game.audio.play('sfx_door'); }
     else g.setOpenInstant(true);
@@ -336,8 +343,8 @@ export class World {
   update(dt, input, player, camera, playing) {
     const p = player.pos;
     // zone visibility (cheap distance culling; fog hides the edge)
-    for (const z of this.zones) {
-      const [x0, x1, z0, z1] = z.rect;
+    for (let i = 0; i < this.zones.length; i++) {
+      const z = this.zones[i], r = z.rect, x0 = r[0], x1 = r[1], z0 = r[2], z1 = r[3]; // (no destructuring: runs every step)
       const dx = Math.max(x0 - p.x, 0, p.x - x1), dz = Math.max(z0 - p.z, 0, p.z - z1);
       z.group.visible = dx * dx + dz * dz < CULL_MARGIN * CULL_MARGIN;
     }
@@ -354,8 +361,9 @@ export class World {
     }
     this.finalBridge.update(dt);
     this.heart.update(dt);
-    // braziers in visible zones burn
+    // braziers in visible zones burn (and the nearest burning one sets the fire ambience level)
     const t = this.game.time;
+    let near2 = Infinity;
     for (const z of this.zones) {
       if (!z.group.visible) continue;
       for (const b of z.ctx.braziers) {
@@ -368,15 +376,21 @@ export class World {
             if (b.burnT < 3) flick *= 0.45 + 0.55 * Math.abs(Math.sin(t * 19)); // gutters before it dies
           } else if (!b.lit && Math.sin(t * 3.1 + b.pos.x) > 0.6) this.game.effects.flame(b.pos, 3 * this.game.fxScale, dt, 0.12, 0.35);
         }
-        if (lv > 0) this.game.effects.flame(b.pos, (b.eternal ? 40 : 22) * lv * this.game.fxScale, dt, b.eternal ? 0.5 : 0.35, b.eternal ? 1.3 : 0.9);
+        if (lv > 0) {
+          this.game.effects.flame(b.pos, (b.eternal ? 40 : 22) * lv * this.game.fxScale, dt, b.eternal ? 0.5 : 0.35, b.eternal ? 1.3 : 0.9);
+          const dx = b.pos.x - p.x, dz = b.pos.z - p.z, d2 = dx * dx + dz * dz;
+          if (d2 < near2) near2 = d2;
+        }
         b.light.intensity = lv * (b.eternal ? 8 : 5) * flick;
         b.coalsMat.color.set(lv > 0 ? 0xff8a32 : 0x1a1210).multiplyScalar(lv > 0 ? 0.6 + lv * 1.4 * flick : 1);
       }
     }
+    this.nearestFire = Math.sqrt(near2); // Infinity when nothing burns nearby
   }
 
   enterLevel(p) {
     const L = p.level;
+    if (L.tutorial) { this.game.tutorial.onEnterSection(p); this.game.onEnterLevel(L, p); return; } // never a story checkpoint
     if (!p.completed && !p.passage) {
       this.checkpoint = { x: L.spawn[0], z: L.spawn[1], yaw: L.spawn[2] };
       this.progress.data.checkpoint = this.checkpoint;

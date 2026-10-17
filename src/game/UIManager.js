@@ -12,18 +12,23 @@ export class UIManager {
       card: $('card'), cardKicker: $('card-kicker'), cardTitle: $('card-title'),
       flash: $('flash-text'), fade: $('fade'), loading: $('loading'),
       vRewind: $('vignette-rewind'), vWarn: $('vignette-warn'), letterbox: $('letterbox'),
-      title: $('screen-title'), pause: $('screen-pause'), victory: $('screen-victory'),
+      title: $('screen-title'), pause: $('screen-pause'), victory: $('screen-victory'), tdone: $('screen-tutorial-done'),
       controls: $('screen-controls'), credits: $('screen-credits'), settings: $('screen-settings'),
       stats: $('victory-stats'), cont: $('btn-continue'),
       fire: $('theme-fire'), shadow: $('theme-shadow'), time: $('theme-time'),
       dialogue: $('dialogue'), subtitle: $('subtitle'), reading: $('reading'), fps: $('fps'),
     };
+    // per-frame HUD lookups are cached once (the echo ring updates every frame while it shows)
+    this.el.ringArc = this.el.timer.querySelector('.ring');
+    this.el.ringText = this.el.timer.querySelector('.ring-text');
+    this.el.ringLabel = this.el.timer.querySelector('.ring-label');
     this.cardTimer = null;
     this.flashTimer = null;
     this.readTimer = null;
     this.lastPrompt = '';
     this.typing = false;
-    document.querySelectorAll('button[data-action]').forEach((b) => {
+    // the title's rune buttons are driven by TitleMenu (selection, pressed state, input lock)
+    document.querySelectorAll('button[data-action]:not(.rune-btn)').forEach((b) => {
       b.addEventListener('click', (e) => {
         e.stopPropagation();
         game.audio.play('sfx_ui_click');
@@ -35,18 +40,33 @@ export class UIManager {
 
   // ---------------------------------------------------------------- screens
   show(name) {
-    for (const k of ['title', 'pause', 'victory']) this.el[k].classList.toggle('hidden', k !== name);
+    for (const k of ['title', 'pause', 'victory', 'tdone']) this.el[k].classList.toggle('hidden', k !== name);
     this.el.hud.classList.toggle('hidden', name !== 'hud');
   }
 
-  overlay(name) {
+  overlay(name, back = false) {
+    const cur = this.currentOverlay;
+    // Settings → Controls remembers where it came from, so Back returns to Settings
+    if (!back) this.prevOverlay = name && cur && cur !== name ? cur : null;
     for (const k of ['controls', 'credits', 'settings']) this.el[k].classList.toggle('hidden', k !== name);
     if (name === 'settings') this.syncSettings();
+    // keyboard: the panel's Back button takes focus, so Enter / Space close it
+    if (name) this.el[name].querySelector('button.primary')?.focus({ preventScroll: true });
   }
 
-  get overlayOpen() { return ['controls', 'credits', 'settings'].some((k) => !this.el[k].classList.contains('hidden')); }
+  /** Back: return to the overlay this one was opened from, or close. all = close everything. */
+  closeOverlay(all = false) {
+    const prev = this.prevOverlay;
+    this.prevOverlay = null;
+    this.overlay(prev && !all ? prev : null, true);
+  }
 
-  setContinue(show) { this.el.cont.classList.toggle('hidden', !show); }
+  get currentOverlay() { return ['controls', 'credits', 'settings'].find((k) => !this.el[k].classList.contains('hidden')) || null; }
+
+  get overlayOpen() { return !!this.currentOverlay; }
+
+  /** Continue is always shown on the title; without a save it is visibly unavailable. */
+  setContinue() { this.game.titleMenu?.refreshContinue(); }
 
   setMuted(m) { document.querySelectorAll('.mute-btn').forEach((b) => { b.textContent = m ? 'Sound: Off' : 'Sound: On'; }); }
 
@@ -137,13 +157,14 @@ export class UIManager {
   hideReading() { clearTimeout(this.readTimer); this.el.reading.classList.add('hidden'); }
 
   // ---------------------------------------------------------------- HUD
-  setEmbers(n) { this.el.emberCount.textContent = `${n}/${ROOM_COUNT}`; }
+  setEmbers(n) { this.el.emberCount.textContent = `${Math.max(0, Math.min(ROOM_COUNT, n | 0))}/${ROOM_COUNT}`; }
   setLevelName(t) { if (this.el.levelName.textContent !== t) this.el.levelName.textContent = t; }
 
   ring(el, frac, text, warn = false) {
     el.classList.remove('hidden');
-    el.querySelector('.ring').style.strokeDashoffset = String(169.6 * (1 - Math.max(0, Math.min(1, frac))));
-    const t = el.querySelector('.ring-text');
+    const arc = el === this.el.timer ? this.el.ringArc : el.querySelector('.ring');
+    arc.style.strokeDashoffset = String(169.6 * (1 - Math.max(0, Math.min(1, frac))));
+    const t = el === this.el.timer ? this.el.ringText : el.querySelector('.ring-text');
     if (t.textContent !== text) t.textContent = text;
     el.classList.toggle('warn', warn);
   }
@@ -180,7 +201,7 @@ export class UIManager {
 
   /** The key list, shown only the first time in each room (and never in quiet rooms). */
   subFor(p) {
-    if (!p || p.passage || p.level.quiet || p.completed) return '';
+    if (!p || p.passage || p.level.quiet || p.level.tutorial || p.completed) return ''; // (the court teaches its own keys)
     const seen = this.game.world.progress.data.story;
     const key = 'keys_' + p.level.id;
     if (seen.includes(key)) return '';
@@ -197,7 +218,7 @@ export class UIManager {
 
   /** Time: the minute being marked, then the echo's hold (reuses the #timer ring). */
   echoRing(h) {
-    const lbl = this.el.timer.querySelector('.ring-label');
+    const lbl = this.el.ringLabel;
     if (!h) { this.el.timer.classList.remove('echo'); this.el.vRewind.classList.remove('faint'); return; }
     this.ring(this.el.timer, h.t / h.max, String(Math.max(0, Math.ceil(h.t))), h.warn);
     this.el.timer.classList.add('echo');
@@ -216,8 +237,8 @@ export class UIManager {
   }
 
   setVictoryStats(seconds, echoes, secrets, lost) {
-    const m = Math.floor(seconds / 60), s = Math.floor(seconds % 60);
-    this.el.stats.textContent = `Time ${m}:${String(s).padStart(2, '0')}   ·   Minutes left behind ${echoes}   ·   Inscriptions ${secrets}/3   ·   Lost Minutes ${lost}/6`;
+    document.getElementById('victory-time').textContent = formatTime(seconds);
+    this.el.stats.textContent = `Minutes left behind ${echoes}   ·   Inscriptions ${secrets}/3   ·   Lost Minutes ${lost}/6`;
   }
 
   // ---------------------------------------------------------------- settings
@@ -257,3 +278,11 @@ export class UIManager {
 }
 
 const LIGHT_UI = { kindle: '[E] KINDLE THE SCONCE', rekindle: '[E] FEED THE SCONCE', lever: '[E] SLIDE THE STONE', read: '[E] READ' };
+
+/** 754.2 → "12:34"; 4000 → "1:06:40" (play-clock seconds, rounded down). */
+export function formatTime(seconds) {
+  const t = Math.max(0, Math.floor(seconds || 0));
+  const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
+  const ss = String(s).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`;
+}

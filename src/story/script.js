@@ -67,7 +67,10 @@ export const SCENES = {
     { do: 'heartBackwards', wait: 1.5 },
     { cam: [0, 16, 26, 0, 3, 0], speed: 0.5 },
     { say: ['MARROW', 'Go home, Keeper.'] },
-    { do: 'unmakingStart' }, // the Unmaking: control returns; run before the shadows go home
+    // the game ends here, at the Heart: as soon as every ember has landed in its socket (and the
+    // last line above has finished), the ending plays. No control returns, nothing to walk to.
+    { until: 'heartEmbersIn' },
+    { then: 'ending' },
   ],
   ending: [
     { do: 'ashRises', wait: 1.2 },

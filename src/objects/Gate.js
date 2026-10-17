@@ -7,7 +7,8 @@ import { mergeGroup } from './Environment.js';
 // A sealed temple gate (ENV_Exit_Arch + ENV_Door_Slab). The door slab has a real collider; when
 // opened it grinds down into the floor and its collider is removed once the way is clear.
 // axis 'x' = the gate spans along X (sits in a wall that runs east-west); 'z' = spans along Z.
-const postMat = () => stoneMaterial(0x4b4a5e);
+let _postMat = null; // one shared material for every gate frame (was one per gate)
+const postMat = () => _postMat || (_postMat = stoneMaterial(0x4b4a5e));
 let doorMat = null;
 
 export class Gate {

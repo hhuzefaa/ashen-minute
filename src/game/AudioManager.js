@@ -1,4 +1,19 @@
-// All sound is synthesised at runtime with the Web Audio API — no audio files, no licensing.
+// Sound is synthesised at runtime with the Web Audio API, except the fire ambience: two recorded
+// loops (CC BY 3.0, dobroide and Dynamicell via freesound.org; see docs/ASSETS_LICENSES.md).
+import fireBedUrl from '../assets/audio/fire_bed.ogg';
+import fireCrackleUrl from '../assets/audio/fire_crackle.ogg';
+
+// Decoded once and shared (an AudioBuffer is not tied to the context that decoded it).
+let fireLoad = null;
+/** Fetch + decode the fire loops. Resolves to { bed, crackle } or null if this browser can't. */
+function loadFire(ctx) {
+  if (!fireLoad) {
+    const get = (u) => fetch(u).then((r) => r.arrayBuffer()).then((b) => new Promise((ok, no) => ctx.decodeAudioData(b, ok, no)));
+    fireLoad = Promise.all([get(fireBedUrl), get(fireCrackleUrl)]).then(([bed, crackle]) => ({ bed, crackle })).catch(() => null);
+  }
+  return fireLoad;
+}
+
 // Names mirror the asset bible (§7.4): sfx_relic_ignite (kindle), sfx_shadow_align, sfx_echo_mark, ...
 export class AudioManager {
   constructor() {
@@ -29,7 +44,9 @@ export class AudioManager {
     this.revSend.connect(this.reverb).connect(this.master);
     this.noise = this._noiseBuffer(2, 'white');
     this.brown = this._noiseBuffer(4, 'brown');
-    this.crackleBuf = this._crackleBuffer(3);
+    this.fireBus = c.createGain(); this.fireBus.gain.value = 0.5; this.fireBus.connect(this.master);
+    this.fireLevel = 0;
+    loadFire(c).then((f) => { this.fire = f; if (this.firePending) { this.firePending = false; this._startFire(); } });
     this.ready = true;
     this._startAmbience();
   }
@@ -48,22 +65,6 @@ export class AudioManager {
     for (let i = 0; i < d.length; i++) {
       const w = Math.random() * 2 - 1;
       if (kind === 'brown') { last = (last + 0.02 * w) / 1.02; d[i] = last * 3.5; } else d[i] = w;
-    }
-    return b;
-  }
-
-  _crackleBuffer(sec) {
-    const c = this.ctx;
-    const b = c.createBuffer(1, c.sampleRate * sec, c.sampleRate);
-    const d = b.getChannelData(0);
-    let lp = 0;
-    for (let i = 0; i < d.length; i++) { lp += ((Math.random() * 2 - 1) - lp) * 0.08; d[i] = lp * 0.25; }
-    const pops = 70 * sec;
-    for (let k = 0; k < pops; k++) {
-      const at = Math.floor(Math.random() * (d.length - 2000));
-      const amp = 0.2 + Math.random() * 0.8;
-      const len = 80 + Math.floor(Math.random() * 600);
-      for (let j = 0; j < len; j++) d[at + j] += (Math.random() * 2 - 1) * amp * Math.exp(-j / (len * 0.25));
     }
     return b;
   }
@@ -226,6 +227,24 @@ export class AudioManager {
       case 'sfx_door':
         this._noise(t, 2.2, { gain: 0.35, type: 'lowpass', f0: 260, f1: 140, buf: this.brown, attack: 0.3, rev: 0.5 });
         break;
+      // ---- title / menu (soft, low and stony, so menu navigation never sounds like a pickup)
+      case 'ui_move':
+        this._tone(520, t, 0.09, { type: 'triangle', gain: 0.12, glideTo: 470, rev: 0.25 });
+        this._noise(t, 0.05, { gain: 0.05, type: 'bandpass', f0: 2600, q: 2, rev: 0.15 });
+        break;
+      case 'ui_confirm':
+        this._tone(70, t, 0.35, { type: 'sine', gain: 0.45, glideTo: 46, rev: 0.3 });
+        this._noise(t, 0.5, { gain: 0.16, f0: 400, f1: 3200, q: 0.7, attack: 0.02, rev: 0.5 });
+        this._tone(660, t + 0.02, 0.5, { type: 'triangle', gain: 0.05, rev: 0.7 });
+        break;
+      case 'ui_wake':
+        this._noise(t, 1.6, { gain: 0.16, f0: 250, f1: 2600, q: 0.6, attack: 0.7, rev: 0.7 });
+        [220, 329.63, 440].forEach((f, i) => this._tone(f, t + 0.12 * i, 1.6, { type: 'sine', gain: 0.045, attack: 0.5, rev: 0.9 }));
+        break;
+      case 'tut_step': // a training step done: two soft rising notes
+        this._tone(660, t, 0.5, { type: 'sine', gain: 0.07, rev: 0.6 });
+        this._tone(990, t + 0.09, 0.7, { type: 'sine', gain: 0.06, rev: 0.7 });
+        break;
       case 'whoosh':
         this._noise(t, 1.2, { gain: 0.15, f0: 300, f1: 2400, q: 0.7, attack: 0.6, rev: 0.6 });
         break;
@@ -271,12 +290,18 @@ export class AudioManager {
     const c = this.ctx;
     const t = c.currentTime;
     if (name === 'amb_fire_crackle') {
-      const s = c.createBufferSource(); s.buffer = this.crackleBuf; s.loop = true;
-      const f = c.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 500;
-      const g = c.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(1.0, t + 0.6);
-      s.connect(f).connect(g).connect(this.amb);
-      s.start();
-      this.loops[name] = { stop: (tt) => { g.gain.setTargetAtTime(0.0001, tt, 0.15); s.stop(tt + 0.8); } };
+      // fire ambience: a warm roar bed + sparse soft crackles, two loops of different lengths
+      // (7.6 s / 5.8 s) so the pattern doesn't audibly repeat. Its level follows the nearest fire.
+      const g = c.createGain(); g.gain.setValueAtTime(0.0001, t);
+      const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 6000; lp.Q.value = 0.5; // safety: no hiss
+      lp.connect(g).connect(this.fireBus);
+      const loop = { gain: g, input: lp, sources: [], stop: (tt) => {
+        g.gain.cancelScheduledValues(tt); g.gain.setTargetAtTime(0.0001, tt, 0.25);
+        for (const src of loop.sources) src.stop(tt + 1.5);
+      } };
+      this.loops[name] = loop;
+      if (this.fire === undefined) this.firePending = true; // still decoding: starts when ready
+      else this._startFire();
     } else if (name === 'near_tone') {
       const o = c.createOscillator(); o.type = 'sine'; o.frequency.value = 329.63;
       const o2 = c.createOscillator(); o2.type = 'sine'; o2.frequency.value = 493.88;
@@ -286,6 +311,39 @@ export class AudioManager {
       o.start(); o2.start();
       this.loops[name] = { gain: g, stop: (tt) => { g.gain.setTargetAtTime(0.0001, tt, 0.1); o.stop(tt + 0.6); o2.stop(tt + 0.6); } };
     }
+  }
+
+  _startFire() {
+    const loop = this.loops.amb_fire_crackle;
+    if (!loop) return;
+    const c = this.ctx, t = c.currentTime;
+    const add = (buffer, gain, offset) => {
+      const src = c.createBufferSource(); src.buffer = buffer; src.loop = true;
+      const g = c.createGain(); g.gain.value = gain;
+      src.connect(g).connect(loop.input);
+      src.start(t, offset);
+      loop.sources.push(src);
+    };
+    if (this.fire) {
+      add(this.fire.bed, 0.55, Math.random() * this.fire.bed.duration);
+      add(this.fire.crackle, 0.5, Math.random() * this.fire.crackle.duration);
+    } else {
+      // fallback (browser can't decode Ogg): a soft low roar from the brown-noise buffer, no pops
+      const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 700;
+      f.connect(loop.input);
+      const src = c.createBufferSource(); src.buffer = this.brown; src.loop = true;
+      const g = c.createGain(); g.gain.value = 0.5;
+      src.connect(g).connect(f); src.start(t);
+      loop.sources.push(src);
+    }
+    loop.gain.gain.setTargetAtTime(Math.max(0.0001, this.fireLevel), t, 0.6); // gentle fade-in
+  }
+
+  /** 0..1 — how close the nearest burning fire is. Smoothed, so it never jumps. */
+  setFireLevel(v) {
+    this.fireLevel = v;
+    const l = this.loops.amb_fire_crackle;
+    if (l && l.sources.length) l.gain.gain.setTargetAtTime(Math.max(0.0001, v), this.ctx.currentTime, 0.35);
   }
 
   setLoopLevel(name, v) {
@@ -302,3 +360,4 @@ export class AudioManager {
 
   stopAllLoops() { Object.keys(this.loops).forEach((k) => this.stopLoop(k)); }
 }
+AudioManager.loadFire = loadFire; // tests/audio_check.py renders the fire offline

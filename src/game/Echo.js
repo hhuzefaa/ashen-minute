@@ -91,7 +91,8 @@ export class EchoSystem {
   get maxEchoes() { return this.level?.maxEchoes ?? 1; }
   get permanent() { return !!this.level?.echoPermanent; }
   get recording() { return !!this.rec; }
-  get canUse() { return !!this.game.world.progress.data.abilities?.echo; }
+  // the story grants it in Room IV; the training court lends it from its echo section (nothing saved)
+  get canUse() { return !!this.game.world.progress.data.abilities?.echo || !!this.game.tutorial?.allowsEcho; }
 
   /** R: start a recording, or release the one in progress. */
   press() {

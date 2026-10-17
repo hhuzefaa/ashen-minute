@@ -38,7 +38,8 @@ export class LightPool {
   }
 
   update(focus) {
-    const scored = this._scored;
+    // entries are pooled and reused frame to frame (this runs every frame)
+    const scored = this._scored, pool = this._pool || (this._pool = []);
     scored.length = 0;
     for (const s of LightSource.registry) {
       if (s.intensity <= 0.02 || !s.parent) continue;
@@ -47,9 +48,11 @@ export class LightPool {
       const d2 = this._p.distanceToSquared(focus);
       const reach = s.distance + 14;
       if (d2 > reach * reach) continue;
-      scored.push({ s, score: s.intensity / (1 + d2 / (s.distance * s.distance)), x: this._p.x, y: this._p.y, z: this._p.z });
+      const e = pool[scored.length] || (pool[scored.length] = { s: null, score: 0, x: 0, y: 0, z: 0 });
+      e.s = s; e.score = s.intensity / (1 + d2 / (s.distance * s.distance)); e.x = this._p.x; e.y = this._p.y; e.z = this._p.z;
+      scored.push(e);
     }
-    scored.sort((a, b) => b.score - a.score);
+    scored.sort(byScore);
     for (let i = 0; i < this.lights.length; i++) {
       const l = this.lights[i];
       const e = scored[i];
@@ -62,6 +65,8 @@ export class LightPool {
     }
   }
 }
+
+const byScore = (a, b) => b.score - a.score;
 
 function isVisible(o) {
   for (let p = o; p; p = p.parent) if (!p.visible) return false;

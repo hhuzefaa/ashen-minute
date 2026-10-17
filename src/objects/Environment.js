@@ -4,6 +4,8 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { COLORS, stoneMaterial, makeRng } from '../game/Palette.js';
 import { runeTexture } from './Glyphs.js';
 import { LightSource } from '../game/LightPool.js';
+import floorUrl from '../assets/textures/temple_floor.jpg';
+import blockUrl from '../assets/textures/stone_block.jpg';
 
 // Procedural architecture kit (ENV_* in the asset bible). All geometry is original.
 // ctx = { group, world, rng, lights: [], braziers: [] }
@@ -15,12 +17,40 @@ const _p = new THREE.Vector3();
 const _c = new THREE.Color();
 const _e = new THREE.Euler();
 
+// Stone textures from the ruined-temple flooring reference (tools/make_stone_textures.py). Loaded
+// once; materials that tile them at different scales share the same image (one GPU upload).
+const texLoader = new THREE.TextureLoader();
+const texCache = {};
+function stoneTex(url) {
+  if (!texCache[url]) {
+    const t = texLoader.load(url);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.anisotropy = 8; // floors are seen at grazing angles
+    texCache[url] = t;
+  }
+  return texCache[url];
+}
+export const FLOOR_TILE_M = 5;   // one texture repeat covers 5 x 5 m of floor
+export const FLOOR_TINT = 0x8e98c4; // cool moonlit tint over the warm reference stone
+
 const shared = {};
 function mat(name) {
   if (!shared[name]) {
+    if (name === 'floor') {
+      const t = stoneTex(floorUrl);
+      shared[name] = new THREE.MeshStandardMaterial({ color: FLOOR_TINT, map: t, bumpMap: t, bumpScale: 1.6, roughness: 0.93, metalness: 0.02 });
+    } else if (name === 'column') {
+      const t = stoneTex(floorUrl);
+      shared[name] = new THREE.MeshStandardMaterial({ color: new THREE.Color(0x8a8ca8), map: t, bumpMap: t, bumpScale: 1.2, roughness: 0.95, metalness: 0.02, flatShading: true });
+    } else if (name === 'wall') {
+      const t = stoneTex(blockUrl);
+      t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+      // instance colours (STONE_TONES, ~0.23) multiply this: the colour lifts them back to the old brightness
+      shared[name] = new THREE.MeshStandardMaterial({ color: new THREE.Color(1, 1, 1).multiplyScalar(2.3), map: t, bumpMap: t, bumpScale: 1.4, roughness: 0.95, metalness: 0.02, flatShading: true });
+    } else
     if (name === 'tile') shared[name] = stoneMaterial(0xffffff);
     else if (name === 'body') shared[name] = stoneMaterial(0x2a2a36);
-    else if (name === 'wall') shared[name] = stoneMaterial(0xffffff);
     else if (name === 'pillar') shared[name] = stoneMaterial(0x45455a);
     else if (name === 'dark') shared[name] = stoneMaterial(0x1f1f29);
     else if (name === 'metal') shared[name] = new THREE.MeshStandardMaterial({ color: 0x2b2826, roughness: 0.6, metalness: 0.5, flatShading: true });
@@ -30,7 +60,6 @@ function mat(name) {
 }
 
 // Shared low-cost geometries (performance: a rounded box costs ~200 triangles, a box 12)
-const TILE_GEO = new THREE.BoxGeometry(0.97, 0.28, 0.97);
 const BLOCK_GEO = new THREE.BoxGeometry(1, 1, 1);
 const SPIKE_GEO = new THREE.ConeGeometry(0.6, 1.8, 5);
 
@@ -58,28 +87,35 @@ function tone(rng, lift = 0) {
   return _c.set(STONE_TONES[Math.floor(rng() * STONE_TONES.length)]).offsetHSL(0, 0, lift + (rng() - 0.5) * 0.03);
 }
 
-/** Walkable platform: tiled top, thick stone body, hanging rocks beneath. Collider = full rectangle. */
+/** Planar world-space UVs (by face normal): top/bottom use x,z; sides use x or z with y. */
+export function worldUV(geo, ox, oy, oz, size) {
+  const p = geo.attributes.position, n = geo.attributes.normal, uv = geo.attributes.uv;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i) + ox, y = p.getY(i) + oy, z = p.getZ(i) + oz;
+    const ax = Math.abs(n.getX(i)), ay = Math.abs(n.getY(i));
+    if (ay > 0.5) uv.setXY(i, x / size, -z / size);
+    else if (ax > 0.5) uv.setXY(i, z / size, y / size);
+    else uv.setXY(i, x / size, y / size);
+  }
+  uv.needsUpdate = true;
+}
+
+/** Walkable platform: stone-slab top, thick stone body, hanging rocks beneath. Collider = full rectangle. */
 export function platform(ctx, { x0, x1, z0, z1, y = 0, depth = 1.8, crackChance = 0.06 }) {
   const { group, world, rng } = ctx;
   const w = x1 - x0, d = z1 - z0;
   const nx = Math.round(w), nz = Math.round(d);
-  const tiles = new THREE.InstancedMesh(TILE_GEO, mat('tile'), nx * nz);
-  let i = 0;
-  for (let ix = 0; ix < nx; ix++) {
-    for (let iz = 0; iz < nz; iz++) {
-      const cracked = rng() < crackChance;
-      _p.set(x0 + (ix + 0.5) * (w / nx), y - 0.14 - rng() * 0.025 - (cracked ? 0.04 : 0), z0 + (iz + 0.5) * (d / nz));
-      _e.set((rng() - 0.5) * 0.02, Math.floor(rng() * 4) * (Math.PI / 2), (rng() - 0.5) * (cracked ? 0.06 : 0.02));
-      _q.setFromEuler(_e);
-      _s.set(w / nx, 1, d / nz);
-      _m.compose(_p, _q, _s);
-      tiles.setMatrixAt(i, _m);
-      tiles.setColorAt(i, tone(rng, cracked ? -0.04 : 0));
-      i++;
-    }
-  }
-  tiles.receiveShadow = true;
-  group.add(tiles);
+  // Consume the random stream exactly as the old per-tile loop did (7 draws per 1 m tile), so every
+  // later random choice in this zone — ruined wall heights, spikes, broken pillars — is unchanged.
+  for (let i = 0, n = nx * nz * 7; i < n; i++) rng();
+  // One stone slab per platform, textured in world space so the flooring runs on seamlessly across
+  // neighbouring platforms. Top surface at y (the walk collider is unchanged).
+  const slabGeo = new THREE.BoxGeometry(w, 0.28, d);
+  worldUV(slabGeo, (x0 + x1) / 2, y - 0.14, (z0 + z1) / 2, FLOOR_TILE_M);
+  const slab = new THREE.Mesh(slabGeo, mat('floor'));
+  slab.position.set((x0 + x1) / 2, y - 0.14, (z0 + z1) / 2);
+  slab.receiveShadow = true;
+  group.add(slab);
 
   const body = new THREE.Mesh(new THREE.BoxGeometry(w - 0.1, depth, d - 0.1), mat('body'));
   body.position.set((x0 + x1) / 2, y - 0.28 - depth / 2, (z0 + z1) / 2);
@@ -149,37 +185,96 @@ export function wall(ctx, { x0, z0, x1, z1, h = 4, thick = 0.9, ruin = 0.35 }) {
   else world.addBox(cx - thick / 2, 0, Math.min(z0, z1), cx + thick / 2, ch, Math.max(z0, z1), 'wall');
 }
 
+/** Fluted shaft: 16 faces with alternating radii (flat shading makes them read as flutes) and a
+ *  slight entasis. UVs scaled so the stone texture keeps its size on tall shafts. */
+function flutedShaft(rBottom, rTop, height) {
+  const geo = new THREE.CylinderGeometry(rTop, rBottom, height, 16, 1, true);
+  const p = geo.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const a = Math.atan2(p.getZ(i), p.getX(i));
+    const k = Math.round(((a + Math.PI) / (Math.PI * 2)) * 16) % 2 ? 0.92 : 1; // every other edge sinks
+    p.setX(i, p.getX(i) * k); p.setZ(i, p.getZ(i) * k);
+  }
+  geo.computeVertexNormals();
+  const uv = geo.attributes.uv;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 2, uv.getY(i) * (height / 2.5));
+  return geo;
+}
+
+/** Turned moulding (torus / scotia / echinus) from a [radius, y] profile. */
+function moulding(profile, segments = 16) {
+  return new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(r, y)), segments);
+}
+
+/**
+ * Classical pillar after the temple model reference: square plinth, turned base, fluted shaft,
+ * echinus capital and square abacus. Same footprint (plinth = old base, r*2.6), same height and
+ * the same collider as the old pillar. Random draws happen in the old order and number, so every
+ * later random choice in the zone is unchanged.
+ */
 export function pillar(ctx, x, z, { h = 5, broken = false, collide = true, r = 0.42 } = {}) {
   const { group, world, rng } = ctx;
   const g = new THREE.Group();
+  const m = mat('column');
   const height = broken ? h * (0.35 + rng() * 0.3) : h;
-  const base = new THREE.Mesh(new RoundedBoxGeometry(r * 2.6, 0.35, r * 2.6, 1, 0.05), mat('pillar'));
-  base.position.y = 0.175;
-  g.add(base);
-  const shaftGeo = new THREE.CylinderGeometry(r * 0.92, r, height - (broken ? 0.35 : 0.8), 8, 3);
+  // plinth + turned base (old base: a 0.35 m slab of r*2.6)
+  const plinth = new THREE.Mesh(new RoundedBoxGeometry(r * 2.6, 0.24, r * 2.6, 1, 0.04), m);
+  plinth.position.y = 0.12;
+  const base = new THREE.Mesh(moulding([[0, 0.24], [r * 1.18, 0.24], [r * 1.22, 0.3], [r * 1.12, 0.38], [r * 0.98, 0.42], [r * 1.08, 0.48], [r * 1.0, 0.53], [r * 0.98, 0.56]]), m);
+  g.add(plinth, base);
+  const shaftH = height - (broken ? 0.56 : 0.56 + 0.62);
   if (broken) {
-    const p = shaftGeo.attributes.position;
-    for (let i = 0; i < p.count; i++) if (p.getY(i) > 0.1) p.setY(i, p.getY(i) + (rng() - 0.5) * 0.5);
-    shaftGeo.computeVertexNormals();
-  }
-  const shaft = new THREE.Mesh(shaftGeo, mat('pillar'));
-  shaft.position.y = 0.35 + (height - (broken ? 0.35 : 0.8)) / 2;
-  g.add(shaft);
-  if (!broken) {
-    const cap = new THREE.Mesh(new RoundedBoxGeometry(r * 2.8, 0.45, r * 2.8, 1, 0.05), mat('pillar'));
-    cap.position.y = height - 0.225;
-    g.add(cap);
+    // the old jagged top: one random lift per shaft vertex above the base (old 8 x 3 cylinder)
+    const old = new THREE.CylinderGeometry(r * 0.92, r, height - 0.35, 8, 3);
+    const jag = [];
+    const op = old.attributes.position;
+    for (let i = 0; i < op.count; i++) if (op.getY(i) > 0.1) jag.push((rng() - 0.5) * 0.5);
+    old.dispose();
+    const geo = flutedShaft(r, r * 0.95, shaftH);
+    const p = geo.attributes.position;
+    for (let i = 0; i < p.count; i++) if (p.getY(i) > 0) p.setY(i, p.getY(i) + jag[i % jag.length]);
+    geo.computeVertexNormals();
+    const shaft = new THREE.Mesh(geo, m);
+    shaft.position.y = 0.56 + shaftH / 2;
+    // fallen drum beside it (same random placement as the old chunk)
+    const drum = new THREE.Mesh(flutedShaft(r * 0.9, r * 0.9, 1.1), m);
+    drum.rotation.set(Math.PI / 2, 0, rng() * 3);
+    drum.position.set((rng() - 0.5) * 1.6, r * 0.9, (rng() - 0.5) * 1.6);
+    g.add(shaft, drum);
   } else {
-    // fallen chunk beside it
-    const chunk = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.9, r * 0.9, 1.1, 8), mat('pillar'));
-    chunk.rotation.set(Math.PI / 2, 0, rng() * 3);
-    chunk.position.set((rng() - 0.5) * 1.6, r * 0.9, (rng() - 0.5) * 1.6);
-    g.add(chunk);
+    const shaft = new THREE.Mesh(flutedShaft(r, r * 0.86, shaftH), m);
+    shaft.position.y = 0.56 + shaftH / 2;
+    // necking ring, echinus and abacus (old cap: a 0.45 m slab of r*2.8 at the top)
+    const top = 0.56 + shaftH;
+    const cap = new THREE.Mesh(moulding([[0, top], [r * 0.92, top], [r * 0.98, top + 0.05], [r * 0.9, top + 0.1], [r * 1.05, top + 0.2], [r * 1.3, top + 0.32], [0, top + 0.32]]), m);
+    const abacus = new THREE.Mesh(new RoundedBoxGeometry(r * 2.8, 0.3, r * 2.8, 1, 0.04), m);
+    abacus.position.y = height - 0.15;
+    g.add(shaft, cap, abacus);
   }
-  const merged = mergeGroup(g, mat('pillar'));
+  const merged = mergeGroup(g, m);
   merged.position.set(x, 0, z);
   group.add(merged);
   if (collide) world.addBox(x - r * 1.3, 0, z - r * 1.3, x + r * 1.3, height, z + r * 1.3, 'wall');
+  return merged;
+}
+
+/** A fallen column lying across a corridor (from x0 to x1 at z). Its collider is a low box (h m)
+ *  tagged 'prop', so it never blocks light or shadows: the Keeper has to hop over it. */
+export function fallenColumn(ctx, x0, x1, z, { r = 0.3, h = 0.55 } = {}) {
+  const len = Math.abs(x1 - x0);
+  const g = new THREE.Group();
+  const m = mat('column');
+  const drum = new THREE.Mesh(flutedShaft(r, r * 0.94, len - 0.5), m);
+  drum.rotation.z = Math.PI / 2;
+  drum.position.set(0.25, r, 0);
+  const abacus = new THREE.Mesh(new RoundedBoxGeometry(r * 2.6, r * 2.1, r * 2.6, 1, 0.04), m); // the capital, still attached
+  abacus.position.set(-len / 2 + 0.25, r * 1.05, 0);
+  abacus.rotation.x = 0.18;
+  g.add(drum, abacus);
+  const merged = mergeGroup(g, m);
+  merged.position.set((x0 + x1) / 2, 0, z);
+  ctx.group.add(merged);
+  ctx.world.addBox(Math.min(x0, x1), 0, z - r - 0.05, Math.max(x0, x1), h, z + r + 0.05, 'prop');
   return merged;
 }
 

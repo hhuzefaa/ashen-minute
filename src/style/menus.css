@@ -1,0 +1,153 @@
+/* ================================================================================================
+   Pause menu and completion screen (after the pause reference), and the dialogue / bark frames
+   (after the dialogue reference). Buttons are the same rune buttons as the title menu, in the wide
+   cut of the artwork (1500:400, middle extended — never stretched). RuneMenu.js drives them.
+   ================================================================================================ */
+.rune-screen {
+  --wbtn-w: min(calc(8.6vh * 3.75), 88vw, 470px);
+  --btn-w: var(--wbtn-w);
+  display: block !important;   /* .screen is a grid; this one is a column */
+  background: none;
+  overflow: hidden;
+  font-family: var(--display);
+}
+.rune-screen.hidden { display: none !important; }
+.pause-backdrop {
+  position: absolute; inset: 0;
+  -webkit-backdrop-filter: blur(6px) brightness(0.62) saturate(0.85);
+  backdrop-filter: blur(6px) brightness(0.62) saturate(0.85);
+  background:
+    radial-gradient(ellipse 40% 60% at 50% 58%, rgba(5, 6, 12, 0.55) 0%, rgba(5, 6, 12, 0.2) 70%, rgba(5, 6, 12, 0) 100%),
+    radial-gradient(ellipse at 50% 50%, rgba(5, 6, 12, 0.1) 40%, rgba(3, 4, 8, 0.7) 100%);
+}
+.rune-wrap {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: clamp(10px, 3vh, 40px) 16px clamp(8px, 2vh, 24px);
+}
+.lockup { text-align: center; white-space: nowrap; pointer-events: none; }
+.rune-screen .logo { font-size: clamp(24px, min(5.6vw, 8.4vh), 108px); }
+.rune-screen .logo-sub { font-size: clamp(10px, min(1.25vw, 2.1vh), 22px); margin-top: 0.45em; }
+.rune-screen .logo-flourish { width: clamp(120px, min(26vw, 34vh), 420px); margin-top: 0.35em; }
+.rune-heading {
+  margin: clamp(6px, 2.2vh, 26px) 0 clamp(8px, 2.4vh, 30px);
+  font-weight: 400; letter-spacing: 0.14em; text-indent: 0.14em;
+  font-size: clamp(18px, 4.4vh, 50px);
+  color: #f0d6a6;
+  text-shadow: 0 0 18px rgba(255, 138, 50, 0.35), 0 2px 4px rgba(0, 0, 0, 0.9);
+}
+.rune-list { display: flex; flex-direction: column; align-items: center; gap: clamp(8px, 1.9vh, 22px); }
+:is(#screen-pause, #screen-victory) .rune-btn.wide { width: var(--wbtn-w); aspect-ratio: 1500 / 400; }
+.rune-btn.wide .rb-normal { background-image: var(--art-normal-wide); }
+.rune-btn.wide .rb-hover { background-image: var(--art-hover-wide); }
+.rune-btn.wide .rb-pressed { background-image: var(--art-pressed-wide); }
+.rune-btn.wide .rb-label { font-size: calc(var(--wbtn-w) * 0.056); letter-spacing: 0.1em; text-indent: 0.1em; }
+.menu-hints.static { position: static; opacity: 0.9; margin-top: clamp(8px, 3vh, 34px); }
+
+/* decoration: the game's own sundial rune, large and faint, either side of the buttons */
+.rune-ring {
+  --ring: min(40vh, 26vw);
+  position: absolute; top: 62%; width: var(--ring); aspect-ratio: 1;
+  background: var(--rune-ring) center / contain no-repeat;
+  opacity: 0.2; pointer-events: none;
+  filter: drop-shadow(0 0 8px rgba(255, 140, 50, 0.55));
+}
+.rune-ring.left { left: 50%; transform: translate(calc(-50% - var(--wbtn-w) * 0.5 - var(--ring) * 0.2), -50%); animation: ringTurn 90s linear infinite; }
+.rune-ring.right { left: 50%; transform: translate(calc(-50% + var(--wbtn-w) * 0.5 + var(--ring) * 0.2), -50%); animation: ringTurnBack 110s linear infinite; }
+@keyframes ringTurn { to { rotate: 360deg; } }
+@keyframes ringTurnBack { to { rotate: -360deg; } }
+
+/* a few slow embers rising through the menu */
+.ember-field { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.ember-field i {
+  position: absolute; bottom: -10px; width: 4px; height: 4px; border-radius: 50%;
+  background: radial-gradient(circle, #ffd17a 0%, #ff8a32 45%, rgba(255, 138, 50, 0) 70%);
+  opacity: 0; animation: emberRise 9s linear infinite;
+}
+.ember-field i:nth-child(1) { left: 31%; animation-delay: 0s; }
+.ember-field i:nth-child(2) { left: 36%; animation-delay: 2.1s; animation-duration: 11s; }
+.ember-field i:nth-child(3) { left: 41%; animation-delay: 4.7s; }
+.ember-field i:nth-child(4) { left: 59%; animation-delay: 1.2s; animation-duration: 10s; }
+.ember-field i:nth-child(5) { left: 64%; animation-delay: 3.3s; }
+.ember-field i:nth-child(6) { left: 69%; animation-delay: 6.2s; animation-duration: 12s; }
+.ember-field i:nth-child(7) { left: 26%; animation-delay: 5.5s; animation-duration: 13s; }
+.ember-field i:nth-child(8) { left: 74%; animation-delay: 7.4s; }
+.ember-field i:nth-child(9) { left: 46%; animation-delay: 8.1s; animation-duration: 14s; }
+.ember-field i:nth-child(10) { left: 54%; animation-delay: 0.7s; animation-duration: 12s; }
+.ember-field i:nth-child(11) { left: 21%; animation-delay: 3.9s; animation-duration: 15s; }
+.ember-field i:nth-child(12) { left: 79%; animation-delay: 9.5s; animation-duration: 13s; }
+@keyframes emberRise {
+  0% { transform: translate(0, 0); opacity: 0; }
+  10% { opacity: 0.9; }
+  60% { opacity: 0.6; }
+  100% { transform: translate(28px, -78vh); opacity: 0; }
+}
+
+/* completion screen */
+.victory-kicker {
+  margin-top: clamp(8px, 2.2vh, 26px);
+  font-size: clamp(10px, 1.6vh, 16px); letter-spacing: 0.42em; text-indent: 0.42em; text-transform: uppercase;
+  color: var(--fire); text-shadow: 0 0 12px rgba(255, 138, 50, 0.45);
+}
+#screen-victory .rune-heading { margin: clamp(4px, 1vh, 12px) 0 clamp(4px, 1.4vh, 16px); }
+.victory-time { display: flex; align-items: baseline; gap: 0.6em; color: #ffe3b0; }
+.vt-label { font-size: clamp(11px, 1.8vh, 18px); letter-spacing: 0.32em; text-transform: uppercase; color: #c9b08a; }
+#victory-time { font-size: clamp(26px, 6.4vh, 68px); font-weight: 600; letter-spacing: 0.06em; font-variant-numeric: tabular-nums; text-shadow: 0 0 22px rgba(255, 150, 60, 0.55), 0 2px 4px #000; }
+.victory-stats { margin: clamp(4px, 1vh, 10px) 0 clamp(12px, 3vh, 34px); font-family: var(--body); font-size: clamp(11px, 1.7vh, 15px); letter-spacing: 0.06em; color: #b9b3c4; text-align: center; }
+
+@media (prefers-reduced-motion: reduce) { .rune-ring, .ember-field i { animation: none; } }
+@media (max-height: 460px) { .rune-screen .menu-hints, .rune-screen .lockup .logo-flourish { display: none; } }
+
+/* ---------- dialogue (cutscenes) and barks (during play): plain subtitles ----------
+   One centred line near the bottom of the screen — "Speaker: text" — speaker and colon in orange,
+   the line in white. No panel: a soft dark outline keeps it readable over any part of the temple. */
+#dialogue, #subtitle {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  width: max-content; max-width: min(900px, calc(100vw - 48px));
+  text-align: center;
+  font-family: var(--body);
+  line-height: 1.45;
+  text-shadow: 0 0 2px #000, 0 1px 3px rgba(0, 0, 0, 0.95), 0 0 10px rgba(0, 0, 0, 0.7);
+  pointer-events: none;
+}
+#dialogue { bottom: calc(11vh + 2.6vh); z-index: 4; font-size: clamp(15px, 2.3vh, 23px); } /* above the letterbox bar */
+#subtitle { bottom: calc(9% + 54px); font-size: clamp(14px, 2.1vh, 21px); }                 /* above the [E] prompts */
+#dialogue .who, #subtitle .who {
+  display: inline; font-weight: 600; color: #ff9a3c;
+}
+#dialogue .who::after, #subtitle .who::after { content: ':\00a0'; } /* the colon stays with the name */
+#dialogue .what, #subtitle .what {
+  display: inline; font-weight: 400; color: #ffffff;
+  overflow-wrap: break-word;
+}
+#dialogue .hint {
+  margin-top: 0.5em;
+  font-size: 11px; letter-spacing: 2px; color: rgba(255, 255, 255, 0.5);
+}
+
+/* ---------- the training court (optional tutorial): one instruction at a time, top centre ----------
+   No panel: text over the scene like the subtitles, keys as the menus' key caps. A finished step
+   turns gold for a moment. The story's ember counter is hidden while training. */
+#tutorial-hint {
+  position: absolute; left: 50%; top: clamp(58px, 9vh, 96px); transform: translateX(-50%);
+  width: max-content; max-width: min(760px, calc(100vw - 48px));
+  text-align: center; pointer-events: none;
+  text-shadow: 0 0 2px #000, 0 1px 3px rgba(0, 0, 0, 0.95), 0 0 10px rgba(0, 0, 0, 0.7);
+}
+#tutorial-hint .th-step {
+  font-family: var(--display); font-size: clamp(10px, 1.4vh, 12px); letter-spacing: 0.32em; text-indent: 0.32em; text-transform: uppercase;
+  color: rgba(255, 179, 107, 0.85); margin-bottom: 0.5em;
+}
+#tutorial-hint .th-text {
+  font-family: var(--display); font-weight: 600; font-size: clamp(15px, 2.3vh, 22px); line-height: 1.4; color: #ffffff;
+  transition: color 0.25s ease;
+}
+#tutorial-hint .th-note {
+  margin-top: 0.45em; font-family: var(--body); font-size: clamp(12px, 1.75vh, 16px); line-height: 1.45; color: rgba(225, 220, 232, 0.82);
+}
+#tutorial-hint .th-note:empty { display: none; }
+#tutorial-hint.done .th-text { color: #ffd17a; text-shadow: 0 0 14px rgba(255, 138, 50, 0.6), 0 1px 3px #000; }
+#tutorial-hint kbd { font-size: 0.78em; vertical-align: 0.08em; text-shadow: none; }
+#hud.tutorial #embers #ember-icon, #hud.tutorial #embers #ember-count { display: none; }
+#hud.tutorial #level-name { margin-left: 0; }
+.tdone-text { max-width: 34em; }

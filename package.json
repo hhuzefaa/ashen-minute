@@ -2,21 +2,53 @@
   "name": "ashen-minutes",
   "version": "1.0.0",
   "description": "Ashen Minutes — a Fire / Shadow / Time 3D puzzle game (Three.js + Vite)",
+  "author": "Huzefa",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
-  },
-  "author": "Huzefa",
-  "license": "MIT",
-  "dependencies": {
-    "@fontsource/cinzel": "^5.3.0",
-    "@fontsource/inter": "^5.3.0",
-    "three": "^0.186.1"
+    "preview": "vite preview",
+    "app": "vite build && electron .",
+    "dist:win": "vite build && electron-builder --win portable --x64"
   },
   "devDependencies": {
+    "@fontsource/cinzel": "^5.3.0",
+    "@fontsource/cinzel-decorative": "^5.3.0",
+    "@fontsource/inter": "^5.3.0",
+    "electron": "44.5.1",
+    "electron-builder": "26.17.0",
+    "three": "^0.186.1",
     "vite": "^8.3.4"
   },
-  "private": true,
-  "type": "module"
+  "build": {
+    "appId": "com.huzefa.ashenminutes",
+    "productName": "Ashen Minutes",
+    "copyright": "© 2026 Huzefa",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "portable": {
+      "artifactName": "AshenMinutes-${version}-portable.exe"
+    }
+  }
 }

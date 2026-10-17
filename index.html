@@ -16,6 +16,7 @@
 
       <!-- HUD -->
       <div id="hud" class="hidden">
+        <div id="tutorial-hint" class="hidden" aria-live="polite"><div class="th-step"></div><div class="th-text"></div><div class="th-note"></div></div>
         <div id="hud-top">
           <div id="embers" aria-label="Embers restored">
             <span id="ember-icon"></span>
@@ -62,47 +63,136 @@
       <div id="flash-text" class="hidden"></div>
 
       <!-- Screens -->
-      <div id="screen-title" class="screen">
-        <div class="title-wrap">
-          <div class="title-kicker">FIRE · SHADOW · TIME</div>
-          <h1 class="logo">ASHEN<span>MINUTES</span></h1>
-          <p class="tagline">The temple remembers what the world has forgotten.</p>
-          <div class="menu">
-            <button data-action="continue" class="primary hidden" id="btn-continue">Continue</button>
-            <button data-action="new-game" id="btn-new">New Game</button>
-            <button data-action="settings">Settings</button>
-            <button data-action="controls">Controls</button>
-            <button data-action="credits">Credits</button>
-            <button data-action="mute" class="mute-btn">Sound: On</button>
+      <!-- Title screen + main menu: one composition. TitleMenu.js moves the same #title-lockup
+           from the centre of the screen to the top while the rune buttons kindle beneath it. -->
+      <div id="screen-title" class="screen" data-phase="splash">
+        <div class="title-veil"></div>
+        <div class="menu-veil"></div>
+
+        <div id="title-lockup" class="title-lockup">
+          <h1 class="logo" aria-label="Ashen Minutes"><span class="logo-glow" aria-hidden="true">Ashen Minutes</span><span class="logo-text">Ashen Minutes</span></h1>
+          <div class="logo-sub">The Shadow Remembers</div>
+          <svg class="logo-flourish" viewBox="0 0 320 24" aria-hidden="true">
+            <path d="M8 12 H128 M192 12 H312" />
+            <path d="M128 12 C138 12 141 5 148 5 C154 5 155 10 151 11" />
+            <path d="M192 12 C182 12 179 19 172 19 C166 19 165 14 169 13" />
+            <path class="fill" d="M160 4 L168 12 L160 20 L152 12 Z" />
+            <circle class="fill" cx="8" cy="12" r="1.6" /><circle class="fill" cx="312" cy="12" r="1.6" />
+          </svg>
+        </div>
+
+        <div id="title-prompt" class="title-prompt"><span>Press any button to continue</span></div>
+
+        <nav id="main-menu" class="main-menu" aria-label="Main menu">
+          <div class="rb-slot"><button class="rune-btn" data-action="continue" id="btn-continue"><span class="rb-art rb-normal"></span><span class="rb-art rb-hover"></span><span class="rb-art rb-pressed"></span><span class="rb-label">Continue<small class="rb-note">No saved journey yet</small></span></button></div>
+          <div class="rb-slot"><button class="rune-btn" data-action="new-game" id="btn-new"><span class="rb-art rb-normal"></span><span class="rb-art rb-hover"></span><span class="rb-art rb-pressed"></span><span class="rb-label">New Game</span></button></div>
+          <div class="rb-slot"><button class="rune-btn" data-action="settings"><span class="rb-art rb-normal"></span><span class="rb-art rb-hover"></span><span class="rb-art rb-pressed"></span><span class="rb-label">Settings</span></button></div>
+          <div class="rb-slot"><button class="rune-btn" data-action="credits"><span class="rb-art rb-normal"></span><span class="rb-art rb-hover"></span><span class="rb-art rb-pressed"></span><span class="rb-label">Credits</span></button></div>
+          <div class="rb-slot"><button class="rune-btn" data-action="quit"><span class="rb-art rb-normal"></span><span class="rb-art rb-hover"></span><span class="rb-art rb-pressed"></span><span class="rb-label">Quit</span></button></div>
+        </nav>
+
+        <div class="menu-hints" aria-hidden="true"><span><kbd>↑</kbd><kbd>↓</kbd> Select</span><span><kbd>Enter</kbd> Confirm</span><span><kbd>Esc</kbd> Back</span></div>
+
+        <div id="title-confirm" class="title-confirm hidden" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+          <div class="confirm-box">
+            <h2 id="confirm-title">Begin a new journey?</h2>
+            <p>The rooms you restored and the minutes you found will be forgotten.</p>
+            <div class="confirm-row">
+              <div class="rb-slot"><button class="rune-btn small" data-confirm="yes"><span class="rb-art rb-normal"></span><span class="rb-art rb-hover"></span><span class="rb-art rb-pressed"></span><span class="rb-label">Begin Anew</span></button></div>
+              <div class="rb-slot"><button class="rune-btn small" data-confirm="no"><span class="rb-art rb-normal"></span><span class="rb-art rb-hover"></span><span class="rb-art rb-pressed"></span><span class="rb-label">Keep It</span></button></div>
+            </div>
           </div>
+        </div>
+
+        <!-- New Game → optional training. Same rune buttons, size and spacing as the main menu. -->
+        <div id="title-choice" class="title-confirm title-choice hidden" role="dialog" aria-modal="true" aria-labelledby="choice-title">
+          <div class="confirm-box">
+            <h2 id="choice-title">How will you begin?</h2>
+            <p>The training court teaches the controls, the shadows and your echo in a few minutes. You can leave it at any time.</p>
+            <div class="choice-col">
+              <div class="rb-slot"><button class="rune-btn" data-confirm="play"><span class="rb-art rb-normal"></span><span class="rb-art rb-hover"></span><span class="rb-art rb-pressed"></span><span class="rb-label">Play Tutorial</span></button></div>
+              <div class="rb-slot"><button class="rune-btn" data-confirm="skip"><span class="rb-art rb-normal"></span><span class="rb-art rb-hover"></span><span class="rb-art rb-pressed"></span><span class="rb-label">Skip Tutorial</span></button></div>
+            </div>
+            <div class="choice-hint"><kbd>Esc</kbd> Back</div>
+          </div>
+        </div>
+
+        <div id="title-farewell" class="title-farewell hidden">
+          <div class="farewell-line">The temple keeps its minutes.</div>
+          <div class="farewell-sub" id="farewell-sub">Your journey is saved. You can close this tab.</div>
+          <div class="farewell-back">Press any button to return</div>
         </div>
       </div>
 
-      <div id="screen-pause" class="screen hidden">
-        <div class="panel">
-          <h2>Paused</h2>
-          <div class="menu">
-            <button data-action="resume" class="primary">Resume</button>
-            <button data-action="restart-room">Restart Puzzle</button>
-            <button data-action="respawn">Return to Checkpoint</button>
-            <button data-action="settings">Settings</button>
-            <button data-action="controls">Controls</button>
-            <button data-action="main-menu">Main Menu</button>
-            <button data-action="mute" class="mute-btn">Sound: On</button>
+      <!-- Pause: themed after the pause reference. Same actions as before (Controls and Sound live in Settings). -->
+      <div id="screen-pause" class="screen rune-screen hidden">
+        <div class="pause-backdrop"></div>
+        <div class="rune-ring left" aria-hidden="true"></div><div class="rune-ring right" aria-hidden="true"></div>
+        <div class="ember-field" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="rune-wrap">
+          <div class="lockup" aria-hidden="true">
+            <div class="logo"><span class="logo-glow">Ashen Minutes</span><span class="logo-text">Ashen Minutes</span></div>
+            <div class="logo-sub">The Shadow Remembers</div>
+            <svg class="logo-flourish" viewBox="0 0 320 24"><path d="M8 12 H128 M192 12 H312" /><path d="M128 12 C138 12 141 5 148 5 C154 5 155 10 151 11" /><path d="M192 12 C182 12 179 19 172 19 C166 19 165 14 169 13" /><path class="fill" d="M160 4 L168 12 L160 20 L152 12 Z" /></svg>
           </div>
+          <h2 class="rune-heading">Paused</h2>
+          <nav class="rune-list" aria-label="Pause menu">
+            <button class="rune-btn wide" data-action="resume"><span class="rb-art rb-normal"></span><span class="rb-art rb-hover"></span><span class="rb-art rb-pressed"></span><span class="rb-label">Resume</span></button>
+            <button class="rune-btn wide story-only" data-action="restart-room"><span class="rb-art rb-normal"></span><span class="rb-art rb-hover"></span><span class="rb-art rb-pressed"></span><span class="rb-label">Restart Puzzle</span></button>
+            <button class="rune-btn wide tut-only hidden" data-action="restart-room"><span class="rb-art rb-normal"></span><span class="rb-art rb-hover"></span><span class="rb-art rb-pressed"></span><span class="rb-label">Restart Section</span></button>
+            <button class="rune-btn wide tut-only hidden" data-action="tutorial-restart"><span class="rb-art rb-normal"></span><span class="rb-art rb-hover"></span><span class="rb-art rb-pressed"></span><span class="rb-label">Restart Tutorial</span></button>
+            <button class="rune-btn wide tut-only hidden" data-action="tutorial-skip"><span class="rb-art rb-normal"></span><span class="rb-art rb-hover"></span><span class="rb-art rb-pressed"></span><span class="rb-label">Skip Tutorial</span></button>
+            <button class="rune-btn wide story-only" data-action="respawn"><span class="rb-art rb-normal"></span><span class="rb-art rb-hover"></span><span class="rb-art rb-pressed"></span><span class="rb-label">Return to Checkpoint</span></button>
+            <button class="rune-btn wide" data-action="settings"><span class="rb-art rb-normal"></span><span class="rb-art rb-hover"></span><span class="rb-art rb-pressed"></span><span class="rb-label">Settings</span></button>
+            <button class="rune-btn wide" data-action="main-menu"><span class="rb-art rb-normal"></span><span class="rb-art rb-hover"></span><span class="rb-art rb-pressed"></span><span class="rb-label">Main Menu</span></button>
+            <button class="rune-btn wide story-only" data-action="quit-game"><span class="rb-art rb-normal"></span><span class="rb-art rb-hover"></span><span class="rb-art rb-pressed"></span><span class="rb-label">Quit Game</span></button>
+          </nav>
+          <div class="menu-hints static" aria-hidden="true"><span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span><span><kbd>Enter</kbd> Select</span><span><kbd>Esc</kbd> Resume</span></div>
         </div>
       </div>
 
-      <div id="screen-victory" class="screen hidden">
-        <div class="panel victory">
-          <div class="title-kicker">THE HEART EMBER BURNS BACKWARDS</div>
-          <h2 class="victory-title">The Temple Remembers</h2>
-          <p id="victory-stats"></p>
-          <div class="menu">
-            <button data-action="new-game" class="primary">Play Again</button>
-            <button data-action="main-menu">Main Menu</button>
-            <button data-action="credits">Credits</button>
+      <!-- End of the optional tutorial: into the story, or back to the menu. -->
+      <div id="screen-tutorial-done" class="screen rune-screen hidden">
+        <div class="pause-backdrop"></div>
+        <div class="rune-ring left" aria-hidden="true"></div><div class="rune-ring right" aria-hidden="true"></div>
+        <div class="ember-field" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="rune-wrap">
+          <div class="lockup" aria-hidden="true">
+            <div class="logo"><span class="logo-glow">Ashen Minutes</span><span class="logo-text">Ashen Minutes</span></div>
+            <div class="logo-sub">The Shadow Remembers</div>
+            <svg class="logo-flourish" viewBox="0 0 320 24"><path d="M8 12 H128 M192 12 H312" /><path d="M128 12 C138 12 141 5 148 5 C154 5 155 10 151 11" /><path d="M192 12 C182 12 179 19 172 19 C166 19 165 14 169 13" /><path class="fill" d="M160 4 L168 12 L160 20 L152 12 Z" /></svg>
           </div>
+          <div class="victory-kicker">The training court</div>
+          <h2 class="rune-heading">Training Complete</h2>
+          <p class="victory-stats tdone-text">You know the light, the shadow and the minute. The temple is waiting.</p>
+          <nav class="rune-list" aria-label="Training complete">
+            <button class="rune-btn wide" data-action="tutorial-story"><span class="rb-art rb-normal"></span><span class="rb-art rb-hover"></span><span class="rb-art rb-pressed"></span><span class="rb-label">Begin the Story</span></button>
+            <button class="rune-btn wide" data-action="main-menu"><span class="rb-art rb-normal"></span><span class="rb-art rb-hover"></span><span class="rb-art rb-pressed"></span><span class="rb-label">Main Menu</span></button>
+          </nav>
+          <div class="menu-hints static" aria-hidden="true"><span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span><span><kbd>Enter</kbd> Select</span></div>
+        </div>
+      </div>
+
+      <!-- Completion: shown once, when the ending finishes. The time is the run's play clock. -->
+      <div id="screen-victory" class="screen rune-screen hidden">
+        <div class="pause-backdrop"></div>
+        <div class="rune-ring left" aria-hidden="true"></div><div class="rune-ring right" aria-hidden="true"></div>
+        <div class="ember-field" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="rune-wrap">
+          <div class="lockup" aria-hidden="true">
+            <div class="logo"><span class="logo-glow">Ashen Minutes</span><span class="logo-text">Ashen Minutes</span></div>
+            <div class="logo-sub">The Shadow Remembers</div>
+            <svg class="logo-flourish" viewBox="0 0 320 24"><path d="M8 12 H128 M192 12 H312" /><path d="M128 12 C138 12 141 5 148 5 C154 5 155 10 151 11" /><path d="M192 12 C182 12 179 19 172 19 C166 19 165 14 169 13" /><path class="fill" d="M160 4 L168 12 L160 20 L152 12 Z" /></svg>
+          </div>
+          <div class="victory-kicker">The Heart Ember burns backwards</div>
+          <h2 class="rune-heading">Journey Complete</h2>
+          <div class="victory-time"><span class="vt-label">Time</span><span id="victory-time">0:00</span></div>
+          <p id="victory-stats" class="victory-stats"></p>
+          <nav class="rune-list" aria-label="Completion">
+            <button class="rune-btn wide" data-action="main-menu"><span class="rb-art rb-normal"></span><span class="rb-art rb-hover"></span><span class="rb-art rb-pressed"></span><span class="rb-label">Return to Main Menu</span></button>
+            <button class="rune-btn wide" data-action="restart"><span class="rb-art rb-normal"></span><span class="rb-art rb-hover"></span><span class="rb-art rb-pressed"></span><span class="rb-label">Restart Game</span></button>
+          </nav>
+          <div class="menu-hints static" aria-hidden="true"><span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span><span><kbd>Enter</kbd> Select</span></div>
         </div>
       </div>
 
@@ -143,7 +233,11 @@
           <div class="setting"><label>Camera assist near stones</label><input type="checkbox" data-key="cameraAssist"></div>
           <div class="setting"><label>Show FPS</label><input type="checkbox" data-key="showFps"></div>
           <p class="small" id="perf-readout"></p>
-          <div class="menu"><button data-action="close-overlay" class="primary">Back</button></div>
+          <div class="menu row">
+            <button data-action="controls">Controls</button>
+            <button data-action="mute" class="mute-btn">Sound: On</button>
+            <button data-action="close-overlay" class="primary">Back</button>
+          </div>
         </div>
       </div>
 
@@ -151,8 +245,9 @@
         <div class="panel credits">
           <h2>Credits</h2>
           <p><b>Ashen Minutes</b> — design, code, story, models and sound by <span class="author">Huzefa</span>.</p>
-          <p>Every model, texture, particle and sound in the game is generated in code at runtime. No third-party art or audio assets are used.</p>
-          <p class="small">Built with Three.js (MIT) and Vite (MIT). Typefaces: Cinzel and Inter (SIL Open Font License 1.1).</p>
+          <p>Models, particles and most sounds are generated in code at runtime. The menu, dialogue and stone artwork comes from the author's own reference sheets.</p>
+          <p class="small">Fire ambience: “fire.crackling” by dobroide (freesound.org/s/4211) and “Fire_Forest_Inferno” by Dynamicell (freesound.org/s/17548), CC BY 4.0 — band-limited, softened and looped.</p>
+          <p class="small">Built with Three.js (MIT) and Vite (MIT). Typefaces: Cinzel, Cinzel Decorative and Inter (SIL Open Font License 1.1).</p>
           <div class="menu"><button data-action="close-overlay" class="primary">Back</button></div>
         </div>
       </div>

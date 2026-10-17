@@ -584,33 +584,31 @@ with sync_playwright() as pw:
     teleport(0, -15, math.pi)
     down('KeyW'); adv(4.0); up('KeyW'); adv(0.5)
     check('final span walked to the Heart', ev(f'{S}.state') == 'cutscene' or level_done(10), f"pos {ev(f'[{S}.player.pos.x,{S}.player.pos.z]')}")
-    for _ in range(40):
-        if ev(f'{S}.state') != 'cutscene': break
-        press('Space'); adv(1.0)
-    check('the Unmaking: control returns after "Go home, Keeper."', ev(f'{S}.state') == 'playing' and ev(f'!!{S}.unmaking'))
+    # the finale plays at the Heart, then the ending follows by itself: no control in between
+    heart_pos = ev(f'[{S}.player.pos.x, {S}.player.pos.z]')
+    scenes, seen_playing = [], False
+    for _ in range(80):
+        s, sc = ev(f'{S}.state'), ev(f'{S}.story.scene && {S}.story.scene.id')
+        if sc and (not scenes or scenes[-1] != sc): scenes.append(sc)
+        if s == 'playing': seen_playing = True
+        if s == 'victory': break
+        if s == 'cutscene' and ev(f'{S}.story.scene && {S}.story.scene.waitingInput'): press('Space')
+        adv(0.5)
+    check('the finale hands straight to the ending at the Heart (control never returns)', scenes[-2:] == ['finale', 'ending'] and not seen_playing, str(scenes))
     check('the two permanent echoes are still there', ev(f'{S}.echoes.echoes.filter(e => e.permanent && e.ghost.keeper.group.visible).length') == 2)
-    # a fall restarts only the escape, from the island
-    ev(f'{S}.player.pos.set(-8, 0, 0); {S}.player.vel.set(0,0,0)'); adv(1.5)
-    check('a fall in the Unmaking restarts the escape on the island', ev(f'!!{S}.unmaking') and abs(ev(f'{S}.player.pos.z') + 2.2) < 0.6 and ev(f'{S}.unmaking.t') < 1.2)
-    t0 = ev(f'{S}.time')
-    walk_to(0, -14, 6, sprint=True)
-    check('the final bridge dissolves from the island outward behind you', ev(f'{S}.world.finalBridge.state') in ('DISSOLVING', 'HIDDEN'))
-    for (x, z) in ((-16.5, -16.5), (-16.5, 18.5), (0, 20.5)): walk_to(x, z, 15, sprint=True)
-    adv(0.5)
-    check('the ring\'s shadows went home', ev(f'{S}.world.l10.stones.every(s => !s.awake)'))
-    check('reaching Marrow at the gallery door ends the escape', ev(f'{S}.state') == 'cutscene' and ev(f'{S}.story.scene && {S}.story.scene.id') == 'ending', f'{ev(f"{S}.time") - t0:.1f}s')
-    for _ in range(40):
-        if ev(f'{S}.state') != 'cutscene': break
-        adv(1.0)
+    check('victory where the Keeper stood (no walk away from the Heart)', math.hypot(ev(f'{S}.player.pos.x') - heart_pos[0], ev(f'{S}.player.pos.z') - heart_pos[1]) < 0.1)
     check('finale reaches victory', ev(f'{S}.state') == 'victory', ev(f'{S}.state'))
     check('victory stats list minutes left behind and Lost Minutes', 'Lost Minutes 6/6' in ev('document.getElementById("victory-stats").textContent'))
+    check('completion screen shows the time and two themed options', ':' in ev('document.getElementById("victory-time").textContent') and ev('[...document.querySelectorAll("#screen-victory .rune-btn")].map(b => b.dataset.action).join()') == 'main-menu,restart')
+    check('no ending card lingers behind the completion screen', not ev('document.getElementById("card").classList.contains("show")'))
     check('six rooms restored', ev(f'{S}.world.roomsDone') == 6)
     shot('31_victory')
 
     # ===================================================================== persistence + menus
     ev(f"{S}.onAction('main-menu')"); time.sleep(0.6); adv(0.3)
     check('main menu returns to title', ev(f'{S}.state') == 'title')
-    check('continue offered from save', ev(f'!document.getElementById("btn-continue").classList.contains("hidden")'))
+    check('a completed run is not resumable (Continue not offered)', ev('document.getElementById("btn-continue").offsetParent === null') and ev(f'{S}.world.progress.data.finished'))
+    check('completion time recorded from the play clock', (ev(f'{S}.world.progress.data.finalTime') or 0) > 60)
     check('no console errors', not errors, '; '.join(errors[:4]))
     browser.close()
 

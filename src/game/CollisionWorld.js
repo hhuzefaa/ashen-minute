@@ -8,8 +8,9 @@ export class CollisionWorld {
     this.colliders = [];
     this.grid = new Map();   // static colliders bucketed by XZ cell
     this.dynamic = [];       // colliders that move (rail pedestals) — always checked
-    this._set = new Set();
+    this._stamp = 0; // query de-duplication without a Set (no per-query allocation)
     this._list = [];
+    this._lx = 0; this._lz = 0;
   }
 
   clear() {
@@ -25,6 +26,7 @@ export class CollisionWorld {
     c.tag = c.tag ?? 'solid';
     c.cos = Math.cos(c.yaw);
     c.sin = Math.sin(c.yaw);
+    c._qs = 0;
     this.colliders.push(c);
     if (c.dynamic) { this.dynamic.push(c); return c; }
     const r = Math.hypot(c.hx, c.hz); // conservative XZ bounds for rotated boxes
@@ -50,14 +52,17 @@ export class CollisionWorld {
 
   /** Candidate colliders overlapping the XZ rectangle. */
   query(minX, minZ, maxX, maxZ) {
-    const out = this._list, seen = this._set;
-    out.length = 0; seen.clear();
+    const out = this._list, stamp = ++this._stamp;
+    out.length = 0;
     const x0 = Math.floor(minX / CELL), x1 = Math.floor(maxX / CELL);
     const z0 = Math.floor(minZ / CELL), z1 = Math.floor(maxZ / CELL);
     for (let i = x0; i <= x1; i++) for (let j = z0; j <= z1; j++) {
       const b = this.grid.get(i * 100003 + j);
       if (!b) continue;
-      for (const c of b) if (!seen.has(c)) { seen.add(c); out.push(c); }
+      for (let k = 0; k < b.length; k++) {
+        const c = b[k];
+        if (c._qs !== stamp) { c._qs = stamp; out.push(c); }
+      }
     }
     for (const c of this.dynamic) out.push(c);
     return out;
@@ -70,37 +75,37 @@ export class CollisionWorld {
     });
   }
 
-  // world -> local XZ (inverse of Three.js rotation.y)
+  // world -> local XZ (inverse of Three.js rotation.y). Results go to this._lx/_lz (no arrays:
+  // these run thousands of times a frame for the player, the camera probe and the shadows).
   _local(c, x, z) {
     const dx = x - c.cx, dz = z - c.cz;
-    return [dx * c.cos - dz * c.sin, dx * c.sin + dz * c.cos];
-  }
-
-  _world(c, lx, lz) {
-    return [c.cx + lx * c.cos + lz * c.sin, c.cz - lx * c.sin + lz * c.cos];
+    this._lx = dx * c.cos - dz * c.sin;
+    this._lz = dx * c.sin + dz * c.cos;
   }
 
   /** Highest walkable top under (x,z) that is not above footY + step. -Infinity if none. */
   groundHeight(x, z, footY, step = 0.4, margin = 0.12) {
     let best = -Infinity;
-    for (const c of this.query(x - 1, z - 1, x + 1, z + 1)) {
+    for (let k = 0, list = this.query(x - 1, z - 1, x + 1, z + 1); k < list.length; k++) {
+      const c = list[k];
       if (!c.enabled) continue;
       const top = c.cy + c.hy;
       if (top > footY + step || top < best) continue;
-      const [lx, lz] = this._local(c, x, z);
-      if (Math.abs(lx) <= c.hx + margin && Math.abs(lz) <= c.hz + margin) best = top;
+      this._local(c, x, z);
+      if (Math.abs(this._lx) <= c.hx + margin && Math.abs(this._lz) <= c.hz + margin) best = top;
     }
     return best;
   }
 
   /** Which tagged collider (if any) is directly under the point. */
   standingOn(x, z, footY, tag) {
-    for (const c of this.query(x - 1, z - 1, x + 1, z + 1)) {
+    for (let k = 0, list = this.query(x - 1, z - 1, x + 1, z + 1); k < list.length; k++) {
+      const c = list[k];
       if (!c.enabled || c.tag !== tag) continue;
       const top = c.cy + c.hy;
       if (Math.abs(top - footY) > 0.25) continue;
-      const [lx, lz] = this._local(c, x, z);
-      if (Math.abs(lx) <= c.hx + 0.15 && Math.abs(lz) <= c.hz + 0.15) return c;
+      this._local(c, x, z);
+      if (Math.abs(this._lx) <= c.hx + 0.15 && Math.abs(this._lz) <= c.hz + 0.15) return c;
     }
     return null;
   }
@@ -109,11 +114,13 @@ export class CollisionWorld {
   resolveCylinder(pos, radius, height, step = 0.4) {
     for (let pass = 0; pass < 3; pass++) {
       let moved = false;
-      for (const c of this.query(pos.x - radius - 1, pos.z - radius - 1, pos.x + radius + 1, pos.z + radius + 1)) {
+      for (let k = 0, list = this.query(pos.x - radius - 1, pos.z - radius - 1, pos.x + radius + 1, pos.z + radius + 1); k < list.length; k++) {
+      const c = list[k];
         if (!c.enabled) continue;
         const top = c.cy + c.hy, bottom = c.cy - c.hy;
         if (top <= pos.y + step || bottom >= pos.y + height) continue; // walkable or overhead
-        const [lx, lz] = this._local(c, pos.x, pos.z);
+        this._local(c, pos.x, pos.z);
+        const lx = this._lx, lz = this._lz;
         const qx = Math.max(-c.hx, Math.min(c.hx, lx));
         const qz = Math.max(-c.hz, Math.min(c.hz, lz));
         let dx = lx - qx, dz = lz - qz;
@@ -130,8 +137,9 @@ export class CollisionWorld {
           if (px < pz) { nx = Math.sign(lx || 1) * (c.hx + radius); nz = lz; }
           else { nx = lx; nz = Math.sign(lz || 1) * (c.hz + radius); }
         }
-        const [wx, wz] = this._world(c, nx, nz);
-        pos.x = wx; pos.z = wz;
+        // local -> world
+        pos.x = c.cx + nx * c.cos + nz * c.sin;
+        pos.z = c.cz - nx * c.sin + nz * c.cos;
         moved = true;
       }
       if (!moved) break;
@@ -141,11 +149,14 @@ export class CollisionWorld {
   /** Segment (a -> b) vs solid boxes: returns fraction [0..1] of the first hit, or 1. Used by the camera. */
   raycastFraction(a, b, tags = null) {
     let tMin = 1;
-    for (const c of this.query(Math.min(a.x, b.x) - 1, Math.min(a.z, b.z) - 1, Math.max(a.x, b.x) + 1, Math.max(a.z, b.z) + 1)) {
+    for (let k = 0, list = this.query(Math.min(a.x, b.x) - 1, Math.min(a.z, b.z) - 1, Math.max(a.x, b.x) + 1, Math.max(a.z, b.z) + 1); k < list.length; k++) {
+      const c = list[k];
       if (!c.enabled) continue;
       if (tags && !tags.includes(c.tag)) continue;
-      const [ax, az] = this._local(c, a.x, a.z);
-      const [bx, bz] = this._local(c, b.x, b.z);
+      this._local(c, a.x, a.z);
+      const ax = this._lx, az = this._lz;
+      this._local(c, b.x, b.z);
+      const bx = this._lx, bz = this._lz;
       const ay = a.y - c.cy, by = b.y - c.cy;
       const t = segAabb(ax, ay, az, bx - ax, by - ay, bz - az, c.hx, c.hy, c.hz);
       if (t !== null && t < tMin) tMin = t;
@@ -154,20 +165,20 @@ export class CollisionWorld {
   }
 }
 
+// slab test, one axis at a time (same arithmetic as before, without per-call arrays)
+let _t0 = 0, _t1 = 1;
+function slab(o, d, h) {
+  if (Math.abs(d) < 1e-9) return !(o < -h || o > h);
+  let ta = (-h - o) / d;
+  let tb = (h - o) / d;
+  if (ta > tb) { const t = ta; ta = tb; tb = t; }
+  _t0 = Math.max(_t0, ta);
+  _t1 = Math.min(_t1, tb);
+  return !(_t0 > _t1);
+}
+
 function segAabb(ox, oy, oz, dx, dy, dz, hx, hy, hz) {
-  let t0 = 0, t1 = 1;
-  const o = [ox, oy, oz], d = [dx, dy, dz], h = [hx, hy, hz];
-  for (let i = 0; i < 3; i++) {
-    if (Math.abs(d[i]) < 1e-9) {
-      if (o[i] < -h[i] || o[i] > h[i]) return null;
-    } else {
-      let ta = (-h[i] - o[i]) / d[i];
-      let tb = (h[i] - o[i]) / d[i];
-      if (ta > tb) [ta, tb] = [tb, ta];
-      t0 = Math.max(t0, ta);
-      t1 = Math.min(t1, tb);
-      if (t0 > t1) return null;
-    }
-  }
-  return t0;
+  _t0 = 0; _t1 = 1;
+  if (!slab(ox, dx, hx) || !slab(oy, dy, hy) || !slab(oz, dz, hz)) return null;
+  return _t0;
 }

@@ -24,7 +24,7 @@ The competition rules:
 | 3 | Her echo holds the light while she crosses on its shadow | Room IV: R at the sigil, walk to the spot behind stone A, R; cross; stop over the abyss — the door wakes | **TIME** · leave a minute behind |
 | 4 | Marrow's echo walking her rounds; Ilen crosses on her sweeping shadow | Room III: wait at the near edge; step on as the shadow arrives | …if someone else holds the light |
 | 5 | A fire-road chain lighting sconces in sequence, then a far fire throwing a bridge back | Room V: sweep the gallery (walk north just east of the stone), then stand at the east edge until the far sconce catches; cross on the road it throws | Fire follows the shadow's road |
-| 6 | The finale: two permanent echoes and Ilen holding three shadows on the Heart, then the Unmaking run | Heart: echoes at the west and east spots, slide the south stone twice, stand behind it; then the escape to Marrow at the door | The minutes you leave |
+| 6 | The finale: two permanent echoes and Ilen holding three shadows on the Heart, then the Heart burns backwards | Heart: echoes at the west and east spots, slide the south stone twice, stand behind it; walk the final span to the Heart | The minutes you leave |
 
 ## Edit timeline (3:00)
 
@@ -36,7 +36,7 @@ The competition rules:
 | 1:00–1:20 | Shot 4 — Marrow's rounds | ✱ gameplay |
 | 1:20–1:45 | Shot 3 — mark a minute, the echo holds, stand on your own past, the door wakes | ✱ gameplay |
 | 1:45–2:10 | Shot 5 — the fire road and the bridge thrown back | ✱ gameplay |
-| 2:10–2:42 | Shot 6 — "That one stays." / "…So does that one." / three shadows held / the Unmaking run | ✱ gameplay |
+| 2:10–2:42 | Shot 6 — "That one stays." / "…So does that one." / three shadows held / the Heart burns backwards | ✱ gameplay |
 | 2:42–3:00 | Ending cards and the title: "The temple remembers, so that we may forget." | teaser (in-game) |
 
 Gameplay total ≈ 2:27 (more than 2:00); teaser and cards ≈ 0:33.

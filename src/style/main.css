@@ -77,13 +77,8 @@ canvas#game { display: block; width: 100%; height: 100%; outline: none; }
 /* ---------- screens ---------- */
 .screen { position: absolute; inset: 0; display: grid; place-items: center; background: radial-gradient(ellipse at center, rgba(23,26,44,0.35) 0%, rgba(8,9,16,0.85) 100%); }
 .screen.overlay { background: rgba(8,9,16,0.88); z-index: 5; }
-#screen-title { background: linear-gradient(90deg, rgba(8,9,16,0.88) 0%, rgba(8,9,16,0.55) 45%, rgba(8,9,16,0) 75%); place-items: center start; }
-.title-wrap { padding-left: 9vw; max-width: 640px; }
 .title-kicker { font-family: var(--display); letter-spacing: 9px; font-size: 14px; color: var(--fire); margin-bottom: 18px; }
 .title-kicker::before { content: ''; display: inline-block; width: 36px; height: 1px; background: var(--fire); vertical-align: middle; margin-right: 14px; }
-.logo { font-family: var(--display); font-weight: 700; font-size: clamp(54px, 7.4vw, 104px); letter-spacing: 0.08em; line-height: 0.9; margin: 0; color: var(--text); text-shadow: 0 0 40px rgba(255,138,50,0.25); }
-.logo span { display: block; font-weight: 400; font-size: 0.48em; letter-spacing: 0.42em; color: var(--hot); margin-top: 10px; }
-.tagline { font-family: var(--display); font-style: italic; color: var(--muted); font-size: 18px; letter-spacing: 1px; margin: 22px 0 36px; }
 .menu { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
 .panel .menu { align-items: center; margin-top: 22px; }
 button { font-family: var(--display); font-size: 16px; letter-spacing: 4px; text-transform: uppercase; color: var(--text); background: rgba(23,26,44,0.55); border: 1px solid rgba(233,228,218,0.18); padding: 11px 26px; min-width: 230px; text-align: left; cursor: pointer; transition: all 0.18s ease; }
@@ -114,15 +109,6 @@ kbd { display: inline-block; min-width: 26px; padding: 3px 7px; margin: 0 2px; f
 #letterbox .bar { position: absolute; left: 0; right: 0; height: 0; background: #000; transition: height 0.6s ease; z-index: 3; pointer-events: none; }
 #letterbox .top { top: 0; } #letterbox .bottom { bottom: 0; }
 #letterbox.on .bar { height: 11vh; }
-#dialogue { position: absolute; left: 50%; bottom: 13vh; transform: translateX(-50%); width: min(820px, 86vw); padding: 18px 26px 14px; background: linear-gradient(180deg, rgba(8,9,16,0.82), rgba(8,9,16,0.92)); border-top: 1px solid rgba(255,138,50,0.35); z-index: 4; }
-#dialogue .who, #subtitle .who { font-family: var(--display); font-size: 13px; letter-spacing: 4px; text-transform: uppercase; color: var(--fire); margin-bottom: 8px; }
-#dialogue.marrow .who, #subtitle.marrow .who { color: var(--time); }
-#dialogue.temple .who { color: var(--target); }
-#dialogue .what { font-family: var(--display); font-size: 21px; line-height: 1.45; color: var(--text); min-height: 60px; }
-#dialogue .hint { text-align: right; font-size: 11px; letter-spacing: 2px; color: var(--muted); margin-top: 6px; }
-#subtitle { position: absolute; left: 50%; top: 92px; transform: translateX(-50%); max-width: min(680px, 70vw); text-align: center; padding: 8px 16px; background: rgba(8,9,16,0.5); border-radius: 2px; }
-#subtitle .what { font-size: 15px !important; }
-#subtitle .what { font-family: var(--display); font-size: 17px; line-height: 1.4; color: var(--text); text-shadow: 0 1px 4px #000; }
 #reading { position: absolute; right: 4vw; top: 50%; transform: translateY(-50%); width: min(380px, 40vw); padding: 22px 24px; background: rgba(10,12,22,0.86); border-left: 2px solid var(--time); z-index: 4; }
 #reading .kicker { font-family: var(--display); font-size: 11px; letter-spacing: 5px; color: var(--time); margin-bottom: 10px; }
 #reading .text { font-family: var(--display); font-size: 17px; line-height: 1.55; color: var(--text); }

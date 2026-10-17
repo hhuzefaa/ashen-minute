@@ -31,7 +31,6 @@ Ilen's guilt about running away and abandoning Marrow; the fear of being forgott
 | After Room VI | **The ring wakes**: lit *backwards* the Ember returns every stolen minute, but the Keeper who lights it loses her own minutes of the temple. Ends with Marrow: "One Keeper can't hold three shadows. Unless she leaves some of herself behind." | The choice and its cost — and the final puzzle's rule |
 | The Heart | Ilen leaves two echoes that never fade: "That one stays." / "…So does that one." All three held: "Three shadows. One heart. Hold." | The player performs the sacrifice |
 | Finale | Three embers converge, the Heart burns backwards. "Marrow. Thank you for waiting." / "Go home, Keeper." | Catharsis |
-| **The Unmaking** | Control returns: the shadows return to their stones, the span crumbles behind her, and Ilen runs past her own echoes to Marrow's echo at the gallery door, lantern raised | The ending as an action |
 | Ending cards | "In Vael, a woman wakes and says her sister's name." · "In the temple, the shadows return to their stones." · (all six Lost Minutes: "She remembers the smell of the old hearths, and does not know why.") · **"The temple remembers, so that we may forget."** | Bittersweet resolution; the ending itself is unchanged |
 
 Hints on demand are Marrow's lines too (see `levels.js` `hints`), e.g. "Watch my rounds, child. The shadow comes to you."

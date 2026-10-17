@@ -1,0 +1,235 @@
+/* ================================================================================================
+   Title screen → main menu (TitleMenu.js drives the timeline; CSS only holds looks and states).
+   The button artwork is the provided theme sheet, cut into three states in src/assets/ui/
+   (uiArt.js imports them, preloads them and hands them to CSS as --art-* on :root).
+   Every button keeps the artwork's own 1092:400 proportion (--btn-ar), so it never stretches.
+   ================================================================================================ */
+#screen-title {
+  --btn-ar: 2.73;          /* 1092 / 400, the artwork's own ratio */
+  --btn-w: 320px;          /* set by TitleMenu.layout() from the viewport */
+  --btn-gap: 12px;
+  --menu-top: 50vh;
+  display: block;
+  background: none;
+  overflow: hidden;
+  font-family: var(--display);
+}
+
+/* readability: a soft vignette always, and a darker column behind the menu once it forms */
+.title-veil, .menu-veil { position: absolute; inset: 0; pointer-events: none; }
+.title-veil {
+  background:
+    radial-gradient(ellipse 62% 38% at 50% 40%, rgba(6, 7, 14, 0.42) 0%, rgba(6, 7, 14, 0) 70%),
+    radial-gradient(ellipse at 50% 50%, rgba(6, 7, 14, 0) 45%, rgba(4, 5, 10, 0.78) 100%),
+    linear-gradient(180deg, rgba(4, 5, 10, 0.55) 0%, rgba(4, 5, 10, 0) 22%, rgba(4, 5, 10, 0) 70%, rgba(4, 5, 10, 0.6) 100%);
+}
+.menu-veil {
+  opacity: 0;
+  background:
+    radial-gradient(ellipse 34% 62% at 50% 58%, rgba(5, 6, 12, 0.72) 0%, rgba(5, 6, 12, 0.35) 55%, rgba(5, 6, 12, 0) 100%),
+    linear-gradient(180deg, rgba(5, 6, 12, 0.35), rgba(5, 6, 12, 0.15));
+}
+
+/* ---------- the title lockup: one element, interpolated in position and scale ---------- */
+.title-lockup {
+  position: absolute; left: 50%; top: 0;
+  transform: translate(-50%, -50%) translate3d(0, 42vh, 0);
+  transform-origin: 50% 50%;
+  text-align: center; white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+}
+.title-lockup.animating { will-change: transform; }
+.logo {
+  position: relative; margin: 0;
+  font-family: 'Cinzel Decorative', var(--display);
+  font-weight: 700;
+  font-size: clamp(26px, min(8vw, 15.5vh), 156px);
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+.logo-text, .logo-glow { display: block; }
+.logo-text {
+  position: relative;
+  color: rgba(26, 12, 8, 0.82);
+  -webkit-text-stroke: 0.022em #ffbf73;
+  paint-order: stroke fill;
+  text-shadow: 0 0 0.05em rgba(255, 168, 80, 0.95), 0 0 0.16em rgba(255, 128, 40, 0.75), 0 0.04em 0.02em rgba(0, 0, 0, 0.6);
+}
+.logo-glow {
+  position: absolute; inset: 0;
+  color: #ff8a32;
+  filter: blur(0.14em);
+  opacity: 0.55;
+  animation: logoBreath 4.8s ease-in-out infinite;
+}
+.logo-sub {
+  margin-top: 0.55em;
+  font-family: var(--display); font-weight: 400;
+  font-size: clamp(13px, min(1.75vw, 3.1vh), 30px);
+  letter-spacing: 0.34em; text-indent: 0.34em; /* keep the spaced caps optically centred */
+  text-transform: uppercase;
+  color: #e3c48d;
+  text-shadow: 0 0 12px rgba(255, 150, 60, 0.35), 0 1px 3px rgba(0, 0, 0, 0.9);
+}
+.logo-flourish { display: block; width: clamp(150px, min(22vw, 40vh), 380px); height: auto; margin: 0.5em auto 0; overflow: visible; }
+.logo-flourish path { fill: none; stroke: #d9ad6a; stroke-width: 1.2; stroke-linecap: round; filter: drop-shadow(0 0 3px rgba(255, 140, 50, 0.6)); }
+.logo-flourish .fill { fill: #ffb062; stroke: none; filter: drop-shadow(0 0 4px rgba(255, 140, 50, 0.9)); }
+
+@keyframes logoBreath {
+  0%, 100% { opacity: 0.42; }
+  37% { opacity: 0.62; }
+  52% { opacity: 0.5; }
+  70% { opacity: 0.66; }
+}
+
+/* ---------- "press any button" ---------- */
+.title-prompt {
+  position: absolute; left: 0; right: 0; top: 78vh;
+  text-align: center; pointer-events: none;
+  font-weight: 600; font-size: clamp(11px, min(1.25vw, 2.2vh), 19px);
+  letter-spacing: 0.42em; text-indent: 0.42em; text-transform: uppercase;
+  color: #e8cf9e;
+  text-shadow: 0 0 14px rgba(255, 138, 50, 0.45), 0 1px 3px #000;
+  opacity: 0;
+}
+.title-prompt span { display: inline-block; animation: promptBreath 2.6s ease-in-out infinite; }
+.title-prompt::before, .title-prompt::after {
+  content: ''; display: inline-block; vertical-align: middle;
+  width: clamp(24px, 4vw, 60px); height: 1px; margin: 0 1.1em;
+  background: linear-gradient(90deg, rgba(232, 207, 158, 0), rgba(232, 207, 158, 0.7));
+}
+.title-prompt::after { transform: scaleX(-1); }
+@keyframes promptBreath { 0%, 100% { opacity: 0.95; } 50% { opacity: 0.45; } }
+
+/* ---------- menu ---------- */
+.main-menu {
+  position: absolute; left: 50%; top: var(--menu-top);
+  transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: var(--btn-gap);
+  pointer-events: none;
+}
+#screen-title[data-phase="menu"] .main-menu { pointer-events: auto; }
+.rb-slot { opacity: 0; transform-origin: 50% 50%; }
+
+:is(#screen-title, .rune-screen) .rune-btn {
+  /* reset the generic button look from main.css */
+  all: unset; box-sizing: border-box;
+  position: relative; display: block;
+  width: var(--btn-w);
+  aspect-ratio: 1092 / 400;
+  cursor: pointer;
+  transform-origin: 50% 50%;
+  transition: transform 0.28s cubic-bezier(0.2, 0.9, 0.25, 1.15), filter 0.28s ease;
+  filter: brightness(0.84) saturate(0.92) drop-shadow(0 calc(var(--btn-w) * 0.018) calc(var(--btn-w) * 0.03) rgba(0, 0, 0, 0.7));
+  -webkit-tap-highlight-color: transparent;
+}
+.rb-art {
+  position: absolute; inset: 0;
+  background-size: 100% 100%; /* the box already has the art's exact ratio: no distortion */
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
+.rb-normal { background-image: var(--art-normal); }
+.rb-hover { background-image: var(--art-hover); opacity: 0; transition: opacity 0.24s ease; }
+.rb-pressed { background-image: var(--art-pressed); opacity: 0; transition: opacity 0.3s ease; }
+
+.rb-label {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding-top: 0.06em; /* Cinzel caps sit slightly high in their em box */
+  font-family: var(--display); font-weight: 600;
+  font-size: calc(var(--btn-w) * 0.074);
+  letter-spacing: 0.12em; text-indent: 0.12em;
+  text-transform: uppercase; white-space: nowrap;
+  color: #e9d2a6;
+  text-shadow: 0 0.06em 0.08em rgba(0, 0, 0, 0.95), 0 0 0.5em rgba(0, 0, 0, 0.6);
+  transition: color 0.24s ease, text-shadow 0.24s ease;
+  pointer-events: none;
+}
+.rb-note { display: none; font-family: var(--body); font-weight: 400; font-size: 0.4em; letter-spacing: 0.16em; text-indent: 0.16em; color: #9a96a3; margin-top: 0.45em; text-transform: uppercase; }
+
+/* selected (keyboard focus, gamepad or mouse hover — one shared state) */
+:is(#screen-title, .rune-screen) .rune-btn.is-selected {
+  transform: scale(1.06);
+  filter: brightness(1.04) saturate(1.05) drop-shadow(0 0 calc(var(--btn-w) * 0.045) rgba(255, 118, 32, 0.55));
+}
+.rune-btn.is-selected .rb-hover { opacity: 1; animation: rbFlicker 2.2s ease-in-out infinite; }
+.rune-btn.is-selected .rb-label {
+  color: #fff4d6;
+  text-shadow: 0 0 0.18em rgba(255, 196, 110, 0.95), 0 0 0.55em rgba(255, 118, 30, 0.85), 0 0.05em 0.06em rgba(70, 20, 0, 0.9);
+}
+@keyframes rbFlicker { 0%, 100% { opacity: 1; } 30% { opacity: 0.9; } 55% { opacity: 1; } 78% { opacity: 0.93; } }
+
+/* pressed: the clicked-state artwork flashes in, the button sinks, the label burns */
+:is(#screen-title, .rune-screen) .rune-btn.is-pressed { transform: scale(0.97); transition-duration: 0.09s; }
+.rune-btn.is-pressed .rb-pressed { opacity: 1; transition: opacity 0.06s linear; }
+.rune-btn.is-pressed .rb-label {
+  color: #ff8a3a;
+  text-shadow: 0 0 0.16em rgba(255, 70, 0, 0.95), 0 0 0.5em rgba(255, 50, 0, 0.7), 0 0.05em 0.06em #000;
+}
+
+/* unavailable (Continue with no save): readable, clearly inert, never selectable */
+:is(#screen-title, .rune-screen) .rune-btn.is-disabled { cursor: default; filter: grayscale(0.75) brightness(0.55) drop-shadow(0 4px 8px rgba(0, 0, 0, 0.7)); }
+.rune-btn.is-disabled .rb-label { color: #a8a3ad; font-size: calc(var(--btn-w) * 0.066); }
+.rune-btn.is-disabled .rb-note { display: block; }
+.rune-btn.denied { animation: rbDeny 0.36s ease; }
+@keyframes rbDeny { 0%, 100% { translate: 0 0; } 20% { translate: -6px 0; } 45% { translate: 5px 0; } 70% { translate: -3px 0; } }
+
+/* key hints */
+.menu-hints {
+  position: absolute; left: 0; right: 0; bottom: clamp(10px, 3.2vh, 34px);
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 0.6em clamp(1em, 3vw, 2.2em); padding: 0 12px;
+  font-family: var(--body); font-size: clamp(10px, 1.6vh, 13px); letter-spacing: 0.14em; text-transform: uppercase;
+  color: rgba(200, 196, 210, 0.7);
+  opacity: 0; pointer-events: none;
+}
+.menu-hints kbd { font-size: 0.95em; padding: 2px 6px; margin-right: 3px; }
+
+/* ---------- New Game confirmation (only when a saved journey exists) ---------- */
+.title-confirm {
+  position: absolute; inset: 0; z-index: 4;
+  display: grid; place-items: center;
+  background: radial-gradient(ellipse 60% 50% at 50% 50%, rgba(5, 6, 12, 0.9), rgba(5, 6, 12, 0.78));
+  animation: fadeIn 0.25s ease;
+}
+.main-menu, .menu-hints { transition: opacity 0.25s ease; }
+#screen-title.is-confirming .main-menu { opacity: 0.08; }
+#screen-title.is-confirming .menu-hints { visibility: hidden; }
+.confirm-box { text-align: center; padding: 0 20px; }
+.confirm-box h2 { margin: 0 0 0.4em; font-weight: 600; letter-spacing: 0.16em; font-size: clamp(20px, 3.4vh, 34px); color: #ffd9a0; text-shadow: 0 0 18px rgba(255, 138, 50, 0.5); }
+.confirm-box p { margin: 0 auto 1.4em; max-width: 34em; font-family: var(--display); color: #c9c2cf; font-size: clamp(13px, 2vh, 18px); line-height: 1.5; }
+.confirm-row { display: flex; gap: calc(var(--btn-w) * 0.08); justify-content: center; }
+.confirm-row .rb-slot { opacity: 1; }
+/* the tutorial choice: the main menu's own column — same button size, gap and centre line */
+.choice-col { display: flex; flex-direction: column; align-items: center; gap: var(--btn-gap); }
+.choice-col .rb-slot { opacity: 1; }
+.choice-hint { margin-top: 1.4em; font-family: var(--body); font-size: clamp(10px, 1.6vh, 13px); letter-spacing: 0.14em; text-transform: uppercase; color: rgba(200, 196, 210, 0.7); }
+.choice-hint kbd { margin-right: 4px; }
+:is(#screen-title, .rune-screen) .rune-btn.small { width: calc(var(--btn-w) * 0.86); }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* ---------- Quit (web build: the tab is the window) ---------- */
+.title-farewell {
+  position: absolute; inset: 0; z-index: 4;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.1em;
+  background: rgba(3, 4, 8, 0.97);
+  text-align: center; padding: 0 24px;
+  animation: fadeIn 0.6s ease;
+}
+.farewell-line { font-size: clamp(22px, 4vh, 40px); letter-spacing: 0.12em; color: #ffd39a; text-shadow: 0 0 22px rgba(255, 138, 50, 0.55); }
+.farewell-sub { font-size: clamp(13px, 2.1vh, 18px); letter-spacing: 0.08em; color: #b9b4c2; }
+.farewell-back { margin-top: 1.6em; font-size: clamp(11px, 1.7vh, 14px); letter-spacing: 0.32em; text-transform: uppercase; color: rgba(232, 207, 158, 0.8); animation: promptBreath 2.6s ease-in-out infinite; }
+
+@media (max-height: 420px) { .menu-hints { display: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .logo-glow, .title-prompt span, .rune-btn.is-selected .rb-hover, .farewell-back { animation: none; }
+}
+
+/* settings panel: the extra row (Controls · Sound · Back) */
+.panel .menu.row { flex-direction: row; justify-content: center; flex-wrap: wrap; }
+.panel .menu.row button { min-width: 0; padding: 10px 18px; }
+
+/* short windows: tall panels (Settings) scroll instead of running off the screen */
+.panel { max-height: calc(100vh - 24px); overflow-y: auto; }

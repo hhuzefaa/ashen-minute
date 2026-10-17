@@ -59,6 +59,13 @@ export class Story {
   }
 
   // ---------------------------------------------------------------- barks (non-blocking)
+  /** Drop queued and showing barks (leaving a run: they must not carry into the next one). */
+  clearBarks() {
+    this.barkQueue.length = 0;
+    this.bark = null;
+    this.game.ui.hideSubtitle();
+  }
+
   say(speaker, text, dur = 4.5) {
     this.barkQueue.push({ speaker, text, dur });
   }
@@ -106,17 +113,32 @@ export class Story {
       return;
     }
     if (step.do) { this.game.sceneAction(step.do); s.waitFor = step.wait ?? 0; if (!s.waitFor) this.next(); return; }
+    // { until: condition } holds the scene (input ignored) until Game.storyCondition(condition) is true
+    if (step.until) { if (this.game.storyCondition(step.until)) this.next(); else s.until = step.until; return; }
+    // { then: sceneId } hands straight over to the next scene (it replaces this one; no exitCutscene)
+    if (step.then) { this.play(step.then); return; }
     if (step.wait) { s.waitFor = step.wait; return; }
     this.next();
   }
 
-  /** Esc: run the remaining state-changing actions instantly, then end. */
+  /** Esc: run the remaining state-changing actions instantly, then end. A scene that hands over
+   *  to another one (`until` / `then`) skips to that hand-over instead, so its wait still holds. */
   skip() {
     const s = this.scene;
     if (!s) return;
-    for (let i = s.i + 1; i < s.steps.length; i++) {
+    const hand = s.steps.findIndex((st, k) => k >= s.i && (st.until || st.then));
+    const last = hand >= 0 ? hand : s.steps.length;
+    for (let i = s.i + 1; i < last; i++) {
       const st = s.steps[i];
       if (st.do && st.do !== 'embersConverge' && st.do !== 'ashRises') this.game.sceneAction(st.do, true);
+    }
+    if (hand >= 0) {
+      if (hand === s.i) return; // already waiting at the hand-over
+      this.game.ui.hideDialogue();
+      s.waitingInput = false; s.waitFor = undefined;
+      s.i = hand - 1;
+      this.next();
+      return;
     }
     if (s.step && s.step.do === 'victory') return;
     this.end();
@@ -146,6 +168,10 @@ export class Story {
     if (!s) return;
     s.t += dt;
     if (input.wasPressed('Escape')) { this.skip(); return; }
+    if (s.until) {
+      if (this.game.storyCondition(s.until)) { s.until = null; this.next(); }
+      return;
+    }
     if (s.waitingInput) {
       const adv = input.wasPressed('Space', 'Enter', 'KeyE') || input.clicked;
       if (adv && s.t > 0.25) {

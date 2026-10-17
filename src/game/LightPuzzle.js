@@ -102,10 +102,15 @@ export class LightPuzzle {
       st.relic.glow = st.glow;
       st.relic.update(dt);
     }
+    let anyAwake = false;
+    for (const s of this.stones) if (!s.dormant || s.awake) { anyAwake = true; break; }
+    const vo = this._viewOpts || (this._viewOpts = { lit: false, alignment: 0, solved: false }); // reused every frame
     for (const ru of this.runes.values()) {
       const settling = ru.coverT > 0 && !ru.lit ? Math.min(1, ru.coverT / SHADOW.SETTLE) : 0;
-      const awake = !ru.spec.socket || this.stones.some((s) => !s.dormant || s.awake);
-      ru.view.update(dt, { lit: awake, alignment: ru.lit ? 1 : Math.max(settling, ru.near * 0.6), solved: ru.lit });
+      vo.lit = !ru.spec.socket || anyAwake;
+      vo.alignment = ru.lit ? 1 : Math.max(settling, ru.near * 0.6);
+      vo.solved = ru.lit;
+      ru.view.update(dt, vo);
       ru.bridge?.update(dt);
     }
     this.ember?.update(dt);
@@ -127,15 +132,24 @@ export class LightPuzzle {
   }
 
   nearestInteractable(p) {
-    let best = null, bd = Infinity;
-    const consider = (type, x, z, r, extra) => {
-      const d = (p.x - x) ** 2 + (p.z - z) ** 2;
-      if (d < r * r && d < bd) { bd = d; best = { type, ...extra }; }
-    };
-    for (const b of this.sconces) if (!b.warded) consider('sconce', b.pos.x, b.pos.z, KINDLE_R, { b });
-    for (const st of this.stones) if (st.rail && !st.moving && (!st.dormant || st.awake)) consider('lever', st.rail.lever[0], st.rail.lever[1], LEVER_R, { st });
-    for (const r of this.readables) consider('read', r.x, r.z, 2.2, { r });
-    return best;
+    // (runs every frame: no closures or per-candidate objects; one result object if anything is near)
+    let type = null, ref = null, bd = Infinity;
+    for (const b of this.sconces) {
+      if (b.warded) continue;
+      const d = (p.x - b.pos.x) ** 2 + (p.z - b.pos.z) ** 2;
+      if (d < KINDLE_R * KINDLE_R && d < bd) { bd = d; type = 'sconce'; ref = b; }
+    }
+    for (const st of this.stones) {
+      if (!(st.rail && !st.moving && (!st.dormant || st.awake))) continue;
+      const d = (p.x - st.rail.lever[0]) ** 2 + (p.z - st.rail.lever[1]) ** 2;
+      if (d < LEVER_R * LEVER_R && d < bd) { bd = d; type = 'lever'; ref = st; }
+    }
+    for (const r of this.readables) {
+      const d = (p.x - r.x) ** 2 + (p.z - r.z) ** 2;
+      if (d < 2.2 * 2.2 && d < bd) { bd = d; type = 'read'; ref = r; }
+    }
+    if (!type) return null;
+    return type === 'sconce' ? { type, b: ref } : type === 'lever' ? { type, st: ref } : { type, r: ref };
   }
 
   kindle(b, byHand = false) {

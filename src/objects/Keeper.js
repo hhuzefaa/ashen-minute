@@ -3,6 +3,8 @@ import { COLORS, stoneMaterial, makeRng } from '../game/Palette.js';
 
 // CHR_Keeper — original procedural hooded figure, ~1.72 units tall, feet at origin, faces -Z.
 // Carries an ember lantern whose glow grows with each ember restored.
+const CAPE_PURPLE = 0x6e2a7c; // plum-amethyst: stays purple (not blue) under the cold moonlight
+
 export class Keeper {
   constructor() {
     this.group = new THREE.Group();
@@ -12,7 +14,8 @@ export class Keeper {
     this.walkPhase = 0;
     this.time = 0;
 
-    const cloakMat = new THREE.MeshStandardMaterial({ color: COLORS.cloak, roughness: 0.9, flatShading: true, side: THREE.DoubleSide });
+    // the cloak (cape, mantle and hood: one garment, one material) is a deep amethyst purple
+    const cloakMat = new THREE.MeshStandardMaterial({ color: CAPE_PURPLE, roughness: 0.85, flatShading: true, side: THREE.DoubleSide });
     const innerMat = new THREE.MeshStandardMaterial({ color: 0x1a1922, roughness: 1, flatShading: true });
     const trimMat = new THREE.MeshStandardMaterial({ color: COLORS.rust, roughness: 0.8, flatShading: true });
     const voidMat = new THREE.MeshBasicMaterial({ color: 0x030306 });

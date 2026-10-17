@@ -8,6 +8,10 @@ import { CollisionWorld } from './CollisionWorld.js';
 import { PlayerController } from './PlayerController.js';
 import { CameraController } from './CameraController.js';
 import { UIManager } from './UIManager.js';
+import { TitleMenu } from './TitleMenu.js';
+import { RuneMenu } from './RuneMenu.js';
+import { Tutorial } from './Tutorial.js';
+import { runeTexture } from '../objects/Glyphs.js';
 import { AudioManager } from './AudioManager.js';
 import { Effects } from './Effects.js';
 import { Settings } from './Settings.js';
@@ -18,16 +22,34 @@ import { ROOM_COUNT } from '../world/levels.js';
 import { FEATURES } from './Features.js';
 import { LightSource } from './LightPool.js';
 import { ShadowSystem } from './ShadowSystem.js';
-import { EchoSystem, Ghost } from './Echo.js';
+import { EchoSystem } from './Echo.js';
 import { lightMap } from './LightMap.js';
 import { Story } from '../story/Story.js';
 import { emberMesh } from '../objects/EmberPickup.js';
 
 // Lifecycle, fixed-step update order and top-level states.
-export const STATE = { TITLE: 'title', PLAYING: 'playing', PAUSED: 'paused', CUTSCENE: 'cutscene', VICTORY: 'victory', LOADING: 'loading' };
+export const STATE = { TITLE: 'title', PLAYING: 'playing', PAUSED: 'paused', CUTSCENE: 'cutscene', VICTORY: 'victory', LOADING: 'loading', TUTORIAL_DONE: 'tutorialDone' };
 
 const COLD = { fog: new THREE.Color(0x1d2236), hemiSky: new THREE.Color(0x6a7d9c), hemiGround: new THREE.Color(0x221f2a), moon: new THREE.Color(0x9fb5d8) };
 const WARM = { fog: new THREE.Color(0x2a1a1c), hemiSky: new THREE.Color(0x9a7058), hemiGround: new THREE.Color(0x2a1810), moon: new THREE.Color(0xffc49a) };
+// Title shot: the Sanctuary from its south walkway, across the chasm to the Heart altar.
+const TITLE_FOCUS = new THREE.Vector3(0, 0, -4);  // real lights go to the fires the camera sees
+const TITLE_PARK = [0, 15.5];                       // the (hidden) Keeper waits on the walkway
+// six hub braziers kindle in mirrored pairs, far side first: [index pair, delay s]
+const TITLE_KINDLE = [[[4, 5], 0.7], [[2, 3], 1.05], [[0, 1], 1.4]];
+
+/** The game's sundial rune (Glyphs.js), recoloured gold, for the menus' rune rings. */
+function goldRune() {
+  const src = runeTexture('target', 9).image;
+  const cv = document.createElement('canvas');
+  cv.width = src.width; cv.height = src.height;
+  const g = cv.getContext('2d');
+  g.drawImage(src, 0, 0);
+  g.globalCompositeOperation = 'source-in';
+  g.fillStyle = '#f0b866';
+  g.fillRect(0, 0, cv.width, cv.height);
+  return cv.toDataURL();
+}
 
 export class Game {
   constructor(canvas) {
@@ -72,6 +94,13 @@ export class Game {
     this.player = new PlayerController(this.scene);
     this.cameraCtl = new CameraController(this.camera);
     this.ui = new UIManager(this);
+    this.titleMenu = new TitleMenu(this);
+    // pause + completion: rune-button menus with keyboard / mouse / gamepad (actions unchanged)
+    this.pauseMenu = new RuneMenu(this, document.getElementById('screen-pause'), (a) => this.onAction(a), () => this.resume());
+    this.victoryMenu = new RuneMenu(this, document.getElementById('screen-victory'), (a) => this.onAction(a));
+    this.tutorialMenu = new RuneMenu(this, document.getElementById('screen-tutorial-done'), (a) => this.onAction(a));
+    this.tutorial = new Tutorial(this); // the optional training court (New Game → Play Tutorial)
+    document.documentElement.style.setProperty('--rune-ring', `url("${goldRune()}")`);
     this.world = new World(this);
     this.shadows = new ShadowSystem(this);
     this.echoes = new EchoSystem(this);
@@ -93,8 +122,11 @@ export class Game {
     this.timer = new THREE.Timer();
     this.timer.connect(document);
     this.fps = { acc: 0, n: 0, shown: 0 };
-    this.runStart = 0;
+    this.playTime = 0; // seconds of play this run (playing + cutscenes), saved with progress
     window.addEventListener('resize', () => this.resize());
+    // keep the play clock when the tab is hidden or closed mid-run
+    document.addEventListener('visibilitychange', () => { if (document.hidden) this.saveClock(); });
+    window.addEventListener('pagehide', () => this.saveClock());
     this.applySettings(false);
   }
 
@@ -130,6 +162,7 @@ export class Game {
   }
 
   resize() {
+    this.needsRender = true; // resizing clears the canvas (matters while paused)
     const w = window.innerWidth, h = window.innerHeight;
     this.renderer.setPixelRatio(this.pixelRatio);
     this.renderer.setSize(w, h, false);
@@ -147,7 +180,8 @@ export class Game {
   setWarmth(n) { this.warmthTarget = Math.min(1, n / ROOM_COUNT); }
 
   // ------------------------------------------------------------------ states
-  toTitle() {
+  /** direct = returning from the game: the menu forms at once instead of the splash. */
+  toTitle(direct = false) {
     this.state = STATE.TITLE;
     this.input.exitLock();
     this.ui.show('title');
@@ -157,19 +191,39 @@ export class Game {
     this.ui.hideDialogue();
     this.ui.hideSubtitle();
     this.ui.setContinue(this.world.progress.hasSave);
-    this.audio.stopAllLoops();
     this.story.scene = null;
+    this.story.clearBarks();
+    this.tutorial.end();
     this.echoes.clear();
-    this.unmaking = null;
-    if (this.sun?.on) this.setSun(false);
-    if (this.doorMarrow) { this.doorMarrow.keeper.group.visible = false; this.doorMarrow.light.intensity = 0; }
+    this.clearRunState();
     this.shadows.ilenActive = false;
     this.shadows.clear();
     this.titleT = 0;
-    this.placePlayer(0, 75.5, 0); // park the Keeper on the entrance terrace for the title shot
+    this.placePlayer(TITLE_PARK[0], TITLE_PARK[1], 0); // park the Keeper in the Sanctuary for the title shot
+    this.player.keeper.group.visible = false;
+    this.titleScene(true, direct);
+    this.titleMenu.enter(direct);
+  }
+
+  /** Title-only dressing: the hub braziers kindle and the Heart glows faintly. Undone (back to the
+   *  saved state) before play begins, behind the fade, so progress is never misrepresented. */
+  titleScene(on, instant = false) {
+    const w = this.world, list = w.hubZone.ctx.progressBraziers || [];
+    if (on) {
+      if (!this._titleDress) this._titleDress = { heart: w.heart.awake };
+      w.heart.awake = Math.max(w.heart.awake, 0.2);
+      this._kindle = instant ? null : TITLE_KINDLE.map(([pair, at]) => ({ pair, at, done: false }));
+      if (instant) for (const b of list) { b.lit = true; b.level = 1; }
+    } else if (this._titleDress) {
+      w.heart.awake = this._titleDress.heart;
+      this._titleDress = null;
+      this._kindle = null;
+      w.updateHubBraziers(true);
+    }
   }
 
   placePlayer(x, z, yaw) {
+    this.player.keeper.group.visible = true;
     this.player.setSpawn(new THREE.Vector3(x, 0, z), yaw);
     this.player.respawn();
     this.player.setSafe(x, 0, z, yaw);
@@ -177,19 +231,29 @@ export class Game {
   }
 
   newGame() {
+    if (this.state === STATE.LOADING) return; // a new run is already starting
     this.audio.init();
     this.ui.overlay(null);
+    this.titleMenu.leave();
+    this.victoryMenu?.close();
+    this.pauseMenu.close();
+    this.tutorialMenu.close();
     this.state = STATE.LOADING;
     this.ui.fadeTo(1, 0.5);
     setTimeout(() => {
+      this.titleScene(false);
+      this.titleMenu.hide();
+      this.tutorial.end(); // from the training court (finished or skipped): the story starts clean
       this.world.resetAll();
       this.echoes.clear();
       this.echoes.made = 0;
       this.shadows.clear();
       this.world.progress.data.started = true;
+      this.playTime = 0;
+      this.world.progress.data.playTime = 0;
       this.world.progress.save();
-      this.finaleOrbs = null; this.heartBackwards = false; this.ashRising = 0;
-      this.runStart = performance.now();
+      this.clearRunState();
+      this.story.clearBarks();
       this.onEmbers(0, true);
       this.placePlayer(0, 75.5, 0);
       this.cameraCtl.clearOverride();
@@ -198,15 +262,79 @@ export class Game {
     }, 550);
   }
 
-  continueGame() {
+  /** New Game → Play Tutorial (also Restart Tutorial). The court is a separate place; the save, the
+   *  story and the play clock are untouched until the story itself begins (Begin the Story / Skip). */
+  startTutorial() {
+    if (this.state === STATE.LOADING) return;
     this.audio.init();
     this.ui.overlay(null);
+    this.titleMenu.leave();
+    this.pauseMenu.close();
+    this.tutorialMenu.close();
+    this.state = STATE.LOADING;
+    this.ui.fadeTo(1, 0.5);
+    setTimeout(() => {
+      this.titleScene(false);
+      this.titleMenu.hide();
+      this.story.scene = null;
+      this.story.clearBarks();
+      this.tutorial.end();
+      this.echoes.clear();
+      this.shadows.clear();
+      this.clearRunState();
+      this.onEmbers(0, true); // the court is cold and unlit, like a first visit
+      this.tutorial.begin();
+      const cp = this.tutorial.checkpoint;
+      this.placePlayer(cp.x, cp.z, cp.yaw);
+      this.world.activePuzzle = null; // entering the first section shows its card
+      this.ui.clearHUD();
+      this.beginPlaying();
+      this.ui.fadeTo(0, 0.8);
+    }, 550);
+  }
+
+  /** The end of the court: Begin the Story / Main Menu. */
+  showTutorialDone() {
+    if (this.state !== STATE.PLAYING) return;
+    this.state = STATE.TUTORIAL_DONE;
+    this.echoes.cancelRecording();
+    this.input.clear();
+    this.input.exitLock();
+    this.ui.clearHUD();
+    this.ui.show('tdone');
+    this.tutorialMenu.open(0);
+    this.audio.play('sfx_ember_collect');
+  }
+
+  /** Where Return to Checkpoint and a fall without safe ground lead: the court or the story. */
+  get activeCheckpoint() { return this.tutorial.active ? this.tutorial.checkpoint : this.world.checkpoint; }
+
+  /** Everything a finished (or abandoned) run leaves behind outside the saved progress. */
+  clearRunState() {
+    if (this.finaleOrbs) for (const o of this.finaleOrbs) { o.m.parent?.remove(o.m); o.m.traverse((x) => { x.geometry?.dispose(); x.material?.dispose(); }); }
+    this.finaleOrbs = null;
+    this.heartBackwards = false;
+    this.ashRising = 0;
+    this.hitstop = 0;
+    this.timers.length = 0; // delayed story beats of the old run
+    if (this.sun?.on) this.setSun(false);
+    this.audio.stopAllLoops();
+  }
+
+  continueGame() {
+    if (!this.world.progress.hasSave) return; // nothing to resume: the menu shows Continue as unavailable
+    this.audio.init();
+    this.ui.overlay(null);
+    this.titleMenu.leave();
     this.state = STATE.LOADING;
     this.ui.fadeTo(1, 0.4);
     setTimeout(() => {
+      this.titleScene(false);
+      this.titleMenu.hide();
       const cp = this.world.checkpoint;
-      this.runStart = performance.now();
-      this.onEmbers(this.world.progress.data.completed.length, true);
+      this.playTime = this.world.progress.data.playTime || 0;
+      // rooms restored — not completed.length, which also counts the Heart and passages (the 7/6 bug)
+      this.onEmbers(this.world.roomsDone, true);
       this.placePlayer(cp.x, cp.z, cp.yaw);
       this.beginPlaying();
       this.ui.fadeTo(0, 0.8);
@@ -215,6 +343,8 @@ export class Game {
 
   beginPlaying() {
     this.state = STATE.PLAYING;
+    this.pauseMenu.close(); // its keys (W/S, Space, E) must never be captured during play
+    this.tutorialMenu.close();
     this.cameraCtl.clearOverride(); // never let a cinematic camera leak into play
     this.ui.show('hud');
     this.ui.letterbox(false);
@@ -244,25 +374,49 @@ export class Game {
     this.input.clear();
     this.input.exitLock();
     this.ui.show('pause');
+    // in the training court the pause menu offers the court's own options (still six buttons)
+    const tut = this.tutorial.active, pauseEl = this.ui.el.pause;
+    for (const b of pauseEl.querySelectorAll('.tut-only')) b.classList.toggle('hidden', !tut);
+    for (const b of pauseEl.querySelectorAll('.story-only')) b.classList.toggle('hidden', tut);
+    this.pauseMenu.open(0);
+    this.saveClock();
     if (this.audio.ctx) this.audio.ctx.suspend();
   }
 
   resume() {
     if (this.state !== STATE.PAUSED) return;
+    this.pauseMenu.close();
     if (this.audio.ctx) this.audio.ctx.resume();
     this.ui.overlay(null);
     this.beginPlaying();
   }
 
+  /** The completion screen. Runs once per run: the clock stops here and the run is marked finished,
+   *  so Continue never resumes a completed game. */
   showVictory() {
+    if (this.state === STATE.VICTORY) return;
     this.state = STATE.VICTORY;
+    this.input.clear();
     this.input.exitLock();
     this.ui.letterbox(false);
+    this.ui.hideSubtitle();
+    this.ui.hideDialogue();
+    this.ui.hideCard(); // the last ending card must not linger behind the completion screen
     this.ui.el.flash.classList.remove('show');
     const pr = this.world.progress.data;
-    this.ui.setVictoryStats((performance.now() - this.runStart) / 1000, pr.echoesMade || 0, pr.secrets.length, pr.lostMinutes.length);
+    if (!pr.finished) { pr.finished = true; pr.finalTime = this.playTime; pr.playTime = this.playTime; this.world.progress.save(); }
+    this.ui.setVictoryStats(pr.finalTime ?? this.playTime, pr.echoesMade || 0, pr.secrets.length, pr.lostMinutes.length);
     this.ui.show('victory');
+    this.victoryMenu?.open();
     this.ui.fadeTo(0, 1.5);
+  }
+
+  /** Persist the play clock (pause, main menu, tab hidden). */
+  saveClock() {
+    const pr = this.world.progress;
+    if (this.tutorial.active || !pr.data.started || pr.data.finished) return; // the court is never saved
+    pr.data.playTime = this.playTime;
+    pr.save();
   }
 
   onAction(a) {
@@ -279,14 +433,36 @@ export class Game {
         this.respawn();
         break;
       case 'main-menu':
+        if (this.state === STATE.LOADING) break; // already leaving
+        this.saveClock();
+        this.state = STATE.LOADING; // gameplay stops at once; nothing runs behind the fade
+        this.victoryMenu?.close();
+        this.pauseMenu?.close();
+        this.tutorialMenu.close();
         if (this.audio.ctx) this.audio.ctx.resume();
         this.ui.fadeTo(1, 0.4);
-        setTimeout(() => { this.toTitle(); this.ui.fadeTo(0, 0.8); }, 420);
+        setTimeout(() => { this.toTitle(true); this.ui.fadeTo(0, 0.8); }, 420);
         break;
+      case 'quit': if (this.state === STATE.TITLE) this.titleMenu.quit(); break;
+      case 'quit-game': // pause → Quit Game: leave the run (it stays saved) and say goodbye on the title
+        if (this.state !== STATE.PAUSED) break;
+        this.saveClock();
+        this.state = STATE.LOADING;
+        this.pauseMenu.close();
+        this.ui.fadeTo(1, 0.4);
+        setTimeout(() => { this.toTitle(true); this.titleMenu.finishMorph(); this.titleMenu.quit(); this.ui.fadeTo(0, 0.6); }, 420);
+        break;
+      case 'restart': // completion screen → a fresh run from the cold open
+        if (this.state === STATE.VICTORY) this.newGame();
+        break;
+      case 'tutorial': this.startTutorial(); break;                                       // title: Play Tutorial
+      case 'tutorial-restart': if (this.tutorial.active) this.startTutorial(); break;      // pause: from the start
+      case 'tutorial-skip': if (this.tutorial.active) this.newGame(); break;               // pause: straight into the story
+      case 'tutorial-story': if (this.state === STATE.TUTORIAL_DONE) this.newGame(); break; // Training Complete
       case 'settings': this.audio.init(); this.ui.overlay('settings'); break;
       case 'controls': this.audio.init(); this.ui.overlay('controls'); break;
       case 'credits': this.audio.init(); this.ui.overlay('credits'); break;
-      case 'close-overlay': this.ui.overlay(null); break;
+      case 'close-overlay': this.ui.closeOverlay(); break;
       case 'mute': this.toggleMute(); break;
       default: break;
     }
@@ -327,29 +503,29 @@ export class Game {
     setTimeout(() => this.ui.fadeTo(0, 0.5), 80);
     const pl = this.player;
     if (pl.hasSafe) pl.setSpawn(pl.lastSafe, pl.lastSafeYaw); // back to the last safe ground
-    else { const cp = this.world.checkpoint; pl.setSpawn(new THREE.Vector3(cp.x, 0, cp.z), cp.yaw); }
+    else { const cp = this.activeCheckpoint; pl.setSpawn(new THREE.Vector3(cp.x, 0, cp.z), cp.yaw); }
     this.echoes.cancelRecording(); // falling cancels a minute being marked
-    if (this.unmaking) { this.restartUnmaking(); return; }
     this.falls = (this.falls || 0) + 1;
     this.lastFallAt = this.time;
     this.cameraCtl.snap(pl.spawnYaw, 0.3);
     this.world.activePuzzle?.onFall?.();
+    if (this.tutorial.active) this.tutorial.onFall();
   }
 
   respawn() {
-    const cp = this.world.checkpoint;
+    const cp = this.activeCheckpoint;
     this.placePlayer(cp.x, cp.z, cp.yaw);
   }
 
   restartPuzzle() {
     if (this.state !== STATE.PLAYING) return;
-    if (this.unmaking) { this.restartUnmaking(); return; }
     const p = this.world.activePuzzle;
     if (!p || (p.level.hub && !this.world.progress.data.completed.includes(9))) { this.respawn(); return; }
     this.ui.fadeTo(1, 0.25);
     setTimeout(() => {
       this.echoes.clear();
       this.world.restartActivePuzzle();
+      if (this.tutorial.active) this.tutorial.onSectionRestart(p);
       const [x, z, yaw] = p.level.spawn;
       this.placePlayer(x, z, yaw);
       this.ui.fadeTo(0, 0.5);
@@ -369,6 +545,7 @@ export class Game {
   /** A released echo counts as progress in the room, and Ilen notices the first one. */
   onEchoReleased(e) {
     this.world.activePuzzle?.onEchoReleased?.();
+    if (this.tutorial.active) return; // the court never touches the story's barks or the run's stats
     if (e?.permanent) {
       // the minutes you leave (finale): these echoes never crumble
       const n = this.echoes.echoes.filter((x) => x.permanent).length;
@@ -384,7 +561,6 @@ export class Game {
     const w = this.world;
     if (name === 'wakeRing') w.wakeRing(!skipping);
     else if (name === 'openingBarks') this.story.openingBarks();
-    else if (name === 'unmakingStart') this.startUnmaking();
     else if (name === 'embersConverge') {
       const from = this.player.keeper.lanternCore.getWorldPosition(new THREE.Vector3());
       this.finaleOrbs = [];
@@ -412,7 +588,7 @@ export class Game {
    *  Heart altar to run it backwards. It is a light (kind 'sun'), so it sweeps the ring's shadows. */
   updateSun(dt, input) {
     const w = this.world;
-    if (!w.ringAwake || this.unmaking) { if (this.sun?.on) this.setSun(false); return; }
+    if (!w.ringAwake) { if (this.sun?.on) this.setSun(false); return; }
     if (!this.sun) {
       const m = new THREE.Mesh(new THREE.SphereGeometry(0.45, 12, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(0xfff0c8).multiplyScalar(2.2), toneMapped: false }));
       const light = new LightSource(0xfff0c8, 0, 14, 1.2);
@@ -439,54 +615,9 @@ export class Game {
 
   storyCondition(name) {
     if (name === 'allLostMinutes') return this.world.progress.data.lostMinutes.length >= 6;
+    // the Heart of Minutes: every ember the finale sends has landed in its socket on the Heart
+    if (name === 'heartEmbersIn') return !this.finaleOrbs || this.finaleOrbs.every((o) => o.t >= 1);
     return true;
-  }
-
-  // ------------------------------------------------------------------ the Unmaking (escape)
-  /** "The shadows are returning to their stones": run from the island to the south gallery door. */
-  startUnmaking() {
-    const w = this.world;
-    this.unmaking = { t: 0, crackT: 0, dissolving: false, slept: 0 };
-    if (!this.doorMarrow) this.doorMarrow = new Ghost(this.scene, { marrow: true });
-    const g = this.doorMarrow;
-    g.place(0, 0, 21.4, 0);
-    g.keeper.animate(0, 0, true);
-    g.keeper.lanternPivot.rotation.x = 2.6;
-    g.keeper.group.visible = true;
-    g.light.intensity = 4;
-    w.finalBridge.showImmediate();
-    this.placePlayer(0, -2.2, 0);
-    this.setWarmth(10);
-    this.audio.setWarmth(3);
-    this.ashRising = 60;
-  }
-
-  updateUnmaking(dt) {
-    const u = this.unmaking, w = this.world;
-    u.t += dt;
-    if (!u.dissolving && u.t > 1.2) { u.dissolving = true; w.finalBridge.dissolve(1.2); this.audio.play('sfx_bridge_fade'); }
-    // the ring's shadows go home one by one: rail stone first, then west, then east
-    const order = ['S', 'W', 'E'];
-    while (u.slept < 3 && u.t > 0.6 + u.slept * 1.6) {
-      const st = w.l10.stoneById.get(order[u.slept++]);
-      st.awake = false;
-      this.audio.play('sfx_shadow_crack');
-    }
-    u.crackT -= dt;
-    if (u.crackT <= 0) { u.crackT = 1.1 + Math.random() * 0.8; this.audio.play('sfx_shadow_crack'); this.cameraCtl.shake(0.04, 0.3); }
-    const p = this.player.pos;
-    if (Math.hypot(p.x, p.z - 21.4) < 1.8) this.endUnmaking();
-  }
-
-  /** Falling in the Unmaking restarts only the escape, from the island. */
-  restartUnmaking() {
-    for (const st of this.world.l10.stones) st.awake = true;
-    this.startUnmaking();
-  }
-
-  endUnmaking() {
-    this.unmaking = null;
-    this.story.play('ending');
   }
 
   updateFinaleFX(dt) {
@@ -525,9 +656,17 @@ export class Game {
       this.step(dt / steps);
       if (i === 0) { this.input.pressed.clear(); this.input.mouseDX = this.input.mouseDY = 0; this.input.wheel = 0; this.input.clicked = false; }
     }
-    this.lightPool.update(this.player.pos);
-    this.renderer.info.reset();
-    this.render();
+    this.pauseMenu.poll(raw);
+    this.victoryMenu.poll(raw);
+    this.tutorialMenu.poll(raw);
+    // While paused the world is frozen, so the last frame stays on the canvas: skip the light pool
+    // and the whole render (scene + bloom) unless the canvas was resized or settings changed.
+    if (this.state !== STATE.PAUSED || this.needsRender) {
+      this.needsRender = false;
+      this.lightPool.update(this.state === STATE.TITLE ? TITLE_FOCUS : this.player.pos);
+      this.renderer.info.reset();
+      this.render();
+    }
     this.trackFps(raw);
     this.input.endFrame();
     this.input.clicked = false;
@@ -536,12 +675,14 @@ export class Game {
   step(dt) {
     const input = this.input;
     if (this.state !== STATE.PAUSED) this.time += dt;
+    // play clock: only time spent playing (cutscenes included); never pause, menus, fades or the end screen
+    if ((this.state === STATE.PLAYING || this.state === STATE.CUTSCENE) && !this.tutorial.active) { this.playTime += dt; this.world.progress.data.playTime = this.playTime; }
 
     if (input.wasPressed('KeyM')) this.toggleMute();
     // trailer camera (dev builds only): F9 hides the whole HUD for clean footage
     if (import.meta.env.DEV && input.wasPressed('F9')) { const h = document.getElementById('hud'); h.style.visibility = h.style.visibility === 'hidden' ? '' : 'hidden'; }
     if (input.wasPressed('Escape') && this.state !== STATE.CUTSCENE) {
-      if (this.ui.overlayOpen) this.ui.overlay(null);
+      if (this.ui.overlayOpen) this.ui.closeOverlay();
       else if (this.state === STATE.PLAYING) this.pause();
       else if (this.state === STATE.PAUSED) this.resume();
     }
@@ -611,16 +752,24 @@ export class Game {
     this.player.keeper.group.visible = !this.cameraCtl.tooClose;
     // 4. world: rooms, gates, triggers
     this.world.update(dt, input, this.player, this.cameraCtl, true);
-    if (this.unmaking) { this.updateUnmaking(dt); this.updateFinaleFX(dt); }
+    // fire ambience follows the nearest burning fire (full within ~2 m, gone beyond ~16 m)
+    this._fireT = (this._fireT || 0) - dt;
+    if (this._fireT <= 0) {
+      this._fireT = 0.15;
+      const d = this.world.nearestFire;
+      this.audio.setFireLevel(Number.isFinite(d) ? Math.max(0, Math.min(1, (16 - d) / 14)) : 0);
+    }
     const cur = this.world.activePuzzle;
-    this.ui.updateHUD(this.unmaking ? null : cur, this.player, this.unmaking ? '' : this.objectiveText(cur));
+    if (this.tutorial.active) this.tutorial.update(dt, input);
+    this.ui.updateHUD(cur, this.player, this.objectiveText(cur));
     this.ui.echoRing(this.echoes.hud);
     const ringAwake = this.world.ringAwake;
-    this.ui.setLevelName(!cur || this.unmaking ? '' : cur.level.hub ? (ringAwake ? cur.level.name : 'The Sanctuary of Minutes') : cur.passage ? '' : `${cur.level.numeral} · ${cur.level.name}`);
+    this.ui.setLevelName(!cur ? '' : cur.level.hub ? (ringAwake ? cur.level.name : 'The Sanctuary of Minutes') : cur.passage ? '' : `${cur.level.numeral} · ${cur.level.name}`);
     if (input.wasPressed('KeyE') && !cur?.prompt0) this.ui.hideReading();
   }
 
   objectiveText(p) {
+    if (this.tutorial.active) return this.tutorial.objective;
     const done = this.world.progress.data.completed;
     const ringAwake = this.world.ringAwake;
     if (p && !p.passage && !p.completed && (!p.level.hub || ringAwake)) return p.level.objective;
@@ -632,16 +781,40 @@ export class Game {
     return 'Return to the Sanctuary. The ring has woken.';
   }
 
+  /** The title shot: a slow drift across the Sanctuary; during the menu morph the camera eases a
+   *  little closer and higher so the temple moves with the composition instead of cutting. */
   updateTitle(dt) {
     this.titleT += dt;
-    const a = this.titleT * 0.05;
-    const o = this._titleShot || (this._titleShot = { pos: new THREE.Vector3(), look: new THREE.Vector3(0, 3.5, 44), speed: 1.2 });
-    o.pos.set(Math.sin(a) * 8, 4.2 + Math.sin(this.titleT * 0.2) * 0.4, 70 + Math.cos(a) * 4);
+    const t = this.titleT, k = this.titleMenu.camK;
+    const o = this._titleShot || (this._titleShot = { pos: new THREE.Vector3(), look: new THREE.Vector3(), speed: 2.2 });
+    o.pos.set(Math.sin(t * 0.07) * 1.3, 4.6 + Math.sin(t * 0.23) * 0.12 + k * 0.45, 21.5 - k * 1.8);
+    o.look.set(Math.sin(t * 0.05) * 0.35, 3.1 + k * 0.4, -6);
     this.cameraCtl.override = o;
-    if (this.titleT < 0.05) this.cameraCtl.first = true;
+    if (t < 0.05) this.cameraCtl.first = true;
+    // the hub braziers catch, pair by pair
+    if (this._kindle) {
+      const list = this.world.hubZone.ctx.progressBraziers;
+      for (const kd of this._kindle) {
+        if (kd.done || t < kd.at) continue;
+        kd.done = true;
+        for (const i of kd.pair) {
+          const b = list[i];
+          if (!b.lit) { b.lit = true; b.level = 0; }
+          this.effects.burst(b.pos, 14, this.effects.c.hot, 1.4, 0.1, 0.8);
+        }
+      }
+    }
+    // a few slow embers drift up through the shot (cheap: pooled particles, ~3 per second)
+    this._moteT = (this._moteT || 0) - dt;
+    if (this._moteT <= 0) {
+      this._moteT = 0.25 + Math.random() * 0.35;
+      this.effects.fire.emit((Math.random() - 0.5) * 16, -1 + Math.random() * 2.5, 2 + Math.random() * 13,
+        (Math.random() - 0.5) * 0.2, 0.35 + Math.random() * 0.35, -0.05, this.effects.c.hot, 0.05 + Math.random() * 0.05, 7, 0.05);
+    }
     this.player.update(dt, this.input, 0, this.collision, { canMove: false });
     this.cameraCtl.update(dt, this.input, this.player.pos, this.collision, false);
     this.world.update(dt, this.input, this.player, this.cameraCtl, false);
+    this.titleMenu.update(dt);
   }
 
   render() {
